@@ -9,6 +9,8 @@ module.exports = async (req, res) => {
   if (process.env.APP_SENHA && req.headers["x-senha"] !== process.env.APP_SENHA) return res.status(401).json({ erro: "senha incorreta" });
   const prompt = String((req.body || {}).prompt || "").trim().slice(0, 600);
   if (!prompt) return res.status(400).json({ erro: "prompt vazio" });
+  const est = String((req.body || {}).estilo || "").slice(0, 200);
+  const estilo = est ? " " + est + ", vertical 9:16 composition, no text, no letters, no watermark." : ESTILO;
   const falhas = [];
 
   if (process.env.GEMINI_API_KEY) {
@@ -16,7 +18,7 @@ module.exports = async (req, res) => {
       const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODELO_IMG}:generateContent`, {
         method: "POST", signal: AbortSignal.timeout(30000),
         headers: { "x-goog-api-key": process.env.GEMINI_API_KEY, "content-type": "application/json" },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt + ESTILO }] }],
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt + estilo }] }],
           generationConfig: { responseModalities: ["IMAGE"], imageConfig: { aspectRatio: "9:16" } } })
       });
       if (r.ok) {
@@ -30,7 +32,7 @@ module.exports = async (req, res) => {
   }
 
   try {
-    const url = "https://image.pollinations.ai/prompt/" + encodeURIComponent(prompt + ESTILO) + "?width=768&height=1366&nologo=true&model=flux&seed=" + Math.floor(Math.random() * 1e6);
+    const url = "https://image.pollinations.ai/prompt/" + encodeURIComponent(prompt + estilo) + "?width=768&height=1366&nologo=true&model=flux&seed=" + Math.floor(Math.random() * 1e6);
     const r = await fetch(url, { signal: AbortSignal.timeout(25000) });
     const tipo = r.headers.get("content-type") || "";
     if (r.ok && tipo.startsWith("image/")) { res.setHeader("Content-Type", tipo); res.setHeader("x-fonte", "pollinations"); return res.status(200).send(Buffer.from(await r.arrayBuffer())); }
