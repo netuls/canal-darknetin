@@ -64,6 +64,7 @@ canvas{width:270px;height:480px;background:#000;border-radius:8px;border:1px sol
   <div id="lista"></div>
   <div class="bar">
     <button class="sec" id="bAdd">+ Parágrafo</button>
+    <button id="bImgs">Gerar todas as fotos com IA</button>
     <button class="sec" id="bLote">Enviar várias fotos de uma vez</button>
     <input type="file" id="lote" accept="image/*" multiple hidden>
   </div>
@@ -120,13 +121,29 @@ function render(){
     const hint=document.createElement('div');hint.className='dica';hint.textContent=p.imagem?'Prompt da imagem: '+p.imagem:'';
     const del=document.createElement('button');del.className='sec';del.textContent='Remover';del.style.marginTop='6px';
     del.onclick=()=>{P.splice(i,1);render()};
-    r.append(ta,hint,del);d.append(th,r,f);L.append(d);
+    const gi=document.createElement('button');gi.className='sec';gi.textContent='Gerar foto com IA';gi.style.cssText='margin:6px 8px 0 0';
+    gi.onclick=async()=>{gi.disabled=true;try{await genImg(i)}catch(e){say('Erro: '+e.message)}gi.disabled=false};
+    r.append(ta,hint,gi,del);d.append(th,r,f);L.append(d);
   });
 }
 function setImg(i,file){
-  if(!file)return;const url=URL.createObjectURL(file);const im=new Image();
-  im.onload=()=>{P[i].img=im;P[i].url=url;render()};im.src=url;
+  return new Promise(ok=>{if(!file)return ok();const url=URL.createObjectURL(file);const im=new Image();
+  im.onload=()=>{P[i].img=im;P[i].url=url;render();ok()};im.src=url});
 }
+async function genImg(i){
+  const p=P[i];if(!p.texto.trim()&&!p.imagem)throw new Error('Parágrafo vazio.');
+  say(`Gerando foto ${i+1} de ${P.length}...`);
+  const r=await fetch('/api/imagem',{method:'POST',headers:{'Content-Type':'application/json','x-senha':$('senha').value},
+    body:JSON.stringify({prompt:p.imagem||('Scene illustrating: '+p.texto.trim())})});
+  if(!r.ok){const d=await r.json().catch(()=>({}));throw new Error(d.erro||r.status)}
+  await setImg(i,await r.blob());say(`Foto ${i+1} pronta.`);
+}
+$('bImgs').onclick=async()=>{
+  const b=$('bImgs');b.disabled=true;let n=0;
+  try{for(let i=0;i<P.length;i++){if(P[i].img)continue;await genImg(i);n++;await new Promise(r=>setTimeout(r,1500))}say(n?`${n} foto(s) geradas.`:'Todos os parágrafos já têm foto.')}
+  catch(e){say('Erro: '+e.message+' (as fotos já geradas foram mantidas; clique de novo para continuar)')}
+  b.disabled=false;
+};
 $('bAdd').onclick=()=>{P.push({texto:'',imagem:''});render()};
 $('bLote').onclick=()=>$('lote').click();
 $('lote').onchange=e=>{
