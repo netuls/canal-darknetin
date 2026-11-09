@@ -65,11 +65,12 @@ canvas{width:270px;height:480px;background:#000;border-radius:8px;border:1px sol
   <div class="bar">
     <button class="sec" id="bAdd">+ Parágrafo</button>
     <button id="bImgs">Gerar todas as fotos com IA</button>
+    <button class="sec" id="bGuia">Modo guiado (Gemini)</button>
     <button class="sec" id="bPGrade">Copiar prompt da grade</button>
     <button class="sec" id="bPrompts">Copiar prompts separados</button>
     <button class="sec" id="bGrade">Enviar imagem em grade (corta sozinho)</button>
-    <input type="file" id="grade" accept="image/*" hidden>
-    <label for="gc" style="margin:0">Colunas</label><input id="gc" type="number" min="1" max="8" value="4" style="width:64px">
+    <input type="file" id="grade" accept="image/*" multiple hidden>
+    <label for="gc" style="margin:0">Colunas</label><input id="gc" type="number" min="1" max="8" value="2" style="width:64px">
     <label for="gl" style="margin:0">Linhas</label><input id="gl" type="number" min="1" max="8" value="2" style="width:64px">
     <label for="gm" style="margin:0" title="Pixels descartados em cada borda de cada quadro, para tirar as linhas de separação">Borda</label><input id="gm" type="number" min="0" max="40" value="3" style="width:64px">
     <button class="sec" id="bLote">Enviar várias fotos de uma vez</button>
@@ -149,30 +150,66 @@ async function genImg(i){
   await setImg(i,await r.blob());say(`Foto ${i+1} pronta.`);
 }
 $('bGrade').onclick=()=>$('grade').click();
+const layoutGrade=(count,cmax)=>{const cols=Math.max(1,Math.min(cmax,count));return{cols,rows:Math.ceil(count/cols)}};
 $('grade').onchange=async e=>{
-  const f=e.target.files[0];e.target.value='';if(!f)return;
-  const cols=+$('gc').value||1,rows=+$('gl').value||1,m=Math.max(0,+$('gm').value||0),n=cols*rows;
-  say('Cortando a imagem...');
+  const fs=[...e.target.files].sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true}));e.target.value='';if(!fs.length)return;
+  const cmax=+$('gc').value||1,full=cmax*(+$('gl').value||1),m=Math.max(0,+$('gm').value||0);
+  say('Cortando...');
   try{
-    const im=new Image();im.src=URL.createObjectURL(f);await im.decode();
-    const cw=im.width/cols,ch=im.height/rows;
-    while(P.length<n)P.push({texto:'',imagem:''});
-    for(let k=0;k<n;k++){
-      const c=k%cols,r=Math.floor(k/cols),sx=c*cw+m,sy=r*ch+m,sw=cw-2*m,sh=ch-2*m;
-      const cn=document.createElement('canvas');cn.width=Math.round(sw);cn.height=Math.round(sh);
-      cn.getContext('2d').drawImage(im,sx,sy,sw,sh,0,0,cn.width,cn.height);
-      const blob=await new Promise(ok=>cn.toBlob(ok,'image/jpeg',0.95));
-      await setImg(k,blob);
+    let off=0;
+    for(const f of fs){
+      const resta=Math.max(P.length-off,1),count=Math.min(full,resta),{cols,rows}=count===full?{cols:cmax,rows:full/cmax}:layoutGrade(count,cmax);
+      while(P.length<off+count)P.push({texto:'',imagem:''});
+      const im=new Image();im.src=URL.createObjectURL(f);await im.decode();
+      const cw=im.width/cols,ch=im.height/rows;
+      for(let k=0;k<count;k++){
+        const c=k%cols,r=Math.floor(k/cols),sx=c*cw+m,sy=r*ch+m,sw=cw-2*m,sh=ch-2*m;
+        const cn=document.createElement('canvas');cn.width=Math.round(sw);cn.height=Math.round(sh);
+        cn.getContext('2d').drawImage(im,sx,sy,sw,sh,0,0,cn.width,cn.height);
+        await setImg(off+k,await new Promise(ok=>cn.toBlob(ok,'image/jpeg',0.95)));
+      }
+      off+=count;
     }
-    say(`${n} quadros cortados e colocados nos parágrafos 1 a ${n}, da esquerda para a direita e de cima para baixo.`);
+    say(`${off} quadros cortados (${fs.length} grade(s)) e colocados nos parágrafos 1 a ${off}.`);
   }catch(err){say('Erro ao cortar: '+err.message)}
+};
+let guia=false;
+const prox=()=>P.findIndex(p=>!p.img);
+const promptDe=p=>(p.imagem||('Scene illustrating: '+p.texto.trim()))+'. Cinematic, dark and moody, realistic photography, vertical 9:16, no text, no watermark.';
+async function guiaNext(){
+  const i=prox();
+  if(i<0){guia=false;$('bGuia').textContent='Modo guiado (Gemini)';return say('Todas as fotos estão preenchidas.')}
+  try{await navigator.clipboard.writeText(promptDe(P[i]));say(`Foto ${i+1} de ${P.length}: prompt copiado. Cole no Gemini, gere, copie a imagem e volte aqui com Ctrl+V.`)}
+  catch{say(`Foto ${i+1} de ${P.length}: clique em "Copiar prompt" nesse parágrafo, gere no Gemini e volte com Ctrl+V.`)}
+}
+$('bGuia').onclick=()=>{
+  if(P.some(p=>!p.texto.trim()&&!p.imagem))return say('Gere o roteiro primeiro.');
+  guia=!guia;$('bGuia').textContent=guia?'Parar modo guiado':'Modo guiado (Gemini)';if(guia)guiaNext();
+};
+document.addEventListener('paste',async e=>{
+  if(!guia)return;
+  const it=[...(e.clipboardData?.items||[])].find(x=>x.type.startsWith('image/'));if(!it)return;
+  e.preventDefault();const i=prox();if(i<0)return;
+  await setImg(i,it.getAsFile());await guiaNext();
+});
+const gradePrompt=(list,cols,rows)=>{
+  const n=list.length,cel=list.map((p,i)=>`${i+1}) ${p.imagem||('Scene illustrating: '+p.texto.trim())}`).join('\n');
+  return `Create ONE single image that is a perfectly regular grid of ${n} separate photographs, ${cols} columns by ${rows} rows. Every cell must be exactly the same size, and each cell must be a tall vertical 9:16 portrait frame, so the whole image has a proportion of about ${cols*9}:${rows*16}. Separate the cells only with thin, straight, solid black lines (about 4 pixels). No rounded corners, no film borders, no outer frame, no vignette, no overlapping, no merged or bigger cells, no collage layout. Each photo fills its whole cell edge to edge. Style: cinematic, dark and moody, realistic photography, no text, no letters, no watermark, no recognizable real people. Do not skip or merge any cell. The photos, in order, left to right and then top to bottom:\n${cel}`;
 };
 $('bPGrade').onclick=()=>{
   if(!P.length||P.some(p=>!p.texto.trim()&&!p.imagem))return say('Gere o roteiro primeiro.');
-  const n=P.length,cols=Math.min(4,n),rows=Math.ceil(n/cols);$('gc').value=cols;$('gl').value=rows;
-  const cel=P.map((p,i)=>`${i+1}) ${p.imagem||('Scene illustrating: '+p.texto.trim())}`).join('\n');
-  const t=`Create ONE single image that is a perfectly regular grid of ${n} separate photographs, ${cols} columns by ${rows} rows. Every cell must be exactly the same size, and each cell must be a tall vertical 9:16 portrait frame, so the whole image has a proportion of about ${cols*9}:${rows*16}. Separate the cells only with thin, straight, solid black lines (about 4 pixels). No rounded corners, no film borders, no outer frame, no vignette, no overlapping, no merged or bigger cells, no collage layout. Each photo fills its whole cell edge to edge. Style: cinematic, dark and moody, realistic photography, no text, no letters, no watermark, no recognizable real people. Do not skip or merge any cell. The photos, in order, left to right and then top to bottom:\n${cel}`;
-  navigator.clipboard.writeText(t).then(()=>say(`Prompt da grade copiado (${cols} colunas x ${rows} linhas, já ajustado ao lado do botão de grade). Cole no Gemini e depois envie a imagem.`),()=>say('Não consegui copiar.'));
+  const {cols,rows}=layoutGrade(P.length,4);$('gc').value=cols;$('gl').value=rows;
+  navigator.clipboard.writeText(gradePrompt(P,cols,rows)).then(()=>say(`Prompt da grade copiado (${cols} colunas x ${rows} linhas, já ajustado ao lado do botão de grade).`),()=>say('Não consegui copiar.'));
+};
+// Ponte usada pela extensão do Chrome: devolve a lista de prompts (fotos separadas ou grades de colunas x linhas).
+window.pegarPrompts=modo=>{
+  if(!P.length||P.some(p=>!p.texto.trim()&&!p.imagem))return{erro:'Gere o roteiro no estúdio primeiro.'};
+  if(modo==='grades'){
+    const cmax=+$('gc').value||1,full=cmax*(+$('gl').value||1),out=[];
+    for(let o=0;o<P.length;o+=full){const part=P.slice(o,o+full),{cols,rows}=part.length===full?{cols:cmax,rows:full/cmax}:layoutGrade(part.length,cmax);out.push(gradePrompt(part,cols,rows))}
+    return{tipo:'grade',prompts:out,info:`${out.length} grade(s) de ${cmax}x${full/cmax}`};
+  }
+  return{tipo:'foto',prompts:P.map(promptDe),info:`${P.length} foto(s)`};
 };
 $('bPrompts').onclick=()=>{
   const t=P.map((p,i)=>`${i+1}. ${p.imagem||('Scene illustrating: '+p.texto.trim())}. Cinematic, dark and moody, realistic, vertical 9:16, no text.`).join('\n');
