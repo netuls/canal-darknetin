@@ -89,7 +89,7 @@ canvas{width:270px;height:480px;background:#000;border-radius:8px;border:1px sol
   <h2>4. Voz e extras</h2>
   <div class="row">
     <div><label for="voz">ID da voz na Fish Audio</label><input id="voz" placeholder="32 caracteres, final da URL da voz"></div>
-    <div><label for="vel">Velocidade da fala</label><input id="vel" type="number" min="0.5" max="2" step="0.05" value="0.95"></div>
+    <div><label for="vel">Velocidade da fala</label><input id="vel" type="number" min="0.5" max="2" step="0.05" value="1.05"></div>
     <div><label for="leg">Legenda</label><select id="leg"><option value="1">Ligada</option><option value="0">Desligada</option></select></div>
     <div><label for="mus">Música de fundo (opcional)</label><input id="mus" type="file" accept="audio/*"></div>
   </div>
@@ -108,7 +108,7 @@ canvas{width:270px;height:480px;background:#000;border-radius:8px;border:1px sol
 </section>
 
 <script>
-const $=id=>document.getElementById(id), W=1080, H=1920, GAP=0.35, FADE=0.45;
+const $=id=>document.getElementById(id), W=1080, H=1920, GAP=0.15, FADE=0.25;
 const cv=$('cv'), g=cv.getContext('2d');g.imageSmoothingEnabled=true;g.imageSmoothingQuality='high';
 let P=[]; // {texto,imagem,img,buf,dur}
 const store=(k,v)=>{try{localStorage.setItem(k,v)}catch{}}, load=k=>{try{return localStorage.getItem(k)||''}catch{return ''}};
