@@ -1,7 +1,8 @@
 // Função do Vercel: gera o roteiro de um Short com IA (Google Gemini, plano gratuito).
 // Variáveis de ambiente no Vercel: GEMINI_API_KEY e APP_SENHA
 // Se o modelo sair do ar, veja o nome atual em aistudio.google.com e troque aqui.
-const MODELO = "gemini-3.8-flash";
+// Tenta cada modelo em ordem; se um não responder em 20 s ou não existir, passa para o próximo.
+const MODELOS = [process.env.GEMINI_MODEL, "gemini-flash-latest", "gemini-flash-lite-latest"].filter(Boolean);
 
 module.exports = async (req, res) => {
   res.setHeader("Cache-Control", "no-store");
@@ -26,23 +27,27 @@ Regras:
 - Para cada parágrafo, inclua "imagem": um prompt em inglês para gerar a foto (cinematográfica, vertical 9:16, sem texto na imagem, sem pessoas reais identificáveis).
 Responda APENAS com JSON, sem markdown: {"titulo":"...","paragrafos":[{"texto":"...","imagem":"..."}]}`;
 
-  try {
-    const chamar = (thinking) => fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODELO}:generateContent`, {
-      method: "POST",
-      signal: AbortSignal.timeout(40000),
-      headers: { "x-goog-api-key": process.env.GEMINI_API_KEY, "content-type": "application/json" },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { responseMimeType: "application/json", maxOutputTokens: 4000, ...(thinking ? { thinkingConfig: { thinkingLevel: "low" } } : {}) } })
-    });
-    let r = await chamar(true);
-    if (r.status === 400) r = await chamar(false); // modelo que não aceita a opção de raciocínio
-    if (!r.ok) { console.error("Gemini", r.status, await r.text()); return res.status(502).json({ erro: "IA respondeu " + r.status + (r.status === 429 ? " (limite gratuito, tente em 1 minuto)" : "") }); }
-    const d = await r.json();
-    const txt = (d.candidates?.[0]?.content?.parts || []).map(c => c.text || "").join("");
-    const json = JSON.parse(txt.slice(txt.indexOf("{"), txt.lastIndexOf("}") + 1));
-    res.status(200).json(json);
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ erro: e.name === "TimeoutError" ? "a IA demorou demais, tente de novo" : "falha ao gerar o roteiro (resposta inválida da IA)" });
+  const chamar = (modelo, thinking) => fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent`, {
+    method: "POST",
+    signal: AbortSignal.timeout(20000),
+    headers: { "x-goog-api-key": process.env.GEMINI_API_KEY, "content-type": "application/json" },
+    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { responseMimeType: "application/json", maxOutputTokens: 3000, ...(thinking ? { thinkingConfig: { thinkingLevel: "low" } } : {}) } })
+  });
+  const falhas = [];
+  for (const modelo of MODELOS) {
+    try {
+      let r = await chamar(modelo, true);
+      if (r.status === 400) r = await chamar(modelo, false);
+      if (!r.ok) { const t = await r.text(); console.error("Gemini", modelo, r.status, t); falhas.push(modelo + ": " + r.status); if (r.status === 429 || r.status === 403 || r.status === 401) break; continue; }
+      const d = await r.json();
+      const txt = (d.candidates?.[0]?.content?.parts || []).map(c => c.text || "").join("");
+      const json = JSON.parse(txt.slice(txt.indexOf("{"), txt.lastIndexOf("}") + 1));
+      return res.status(200).json(json);
+    } catch (e) {
+      console.error("Gemini", modelo, e.name, e.message);
+      falhas.push(modelo + ": " + (e.name === "TimeoutError" ? "sem resposta em 20s" : "resposta inválida"));
+    }
   }
+  res.status(502).json({ erro: "IA indisponível agora (" + falhas.join(" | ") + "). Veja se a chave é do aistudio.google.com e tente de novo." });
 };
