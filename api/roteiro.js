@@ -24,7 +24,7 @@ Regras:
 - Termine com um fecho curto que gere curiosidade ou comentário.
 - Divida em 6 a 9 parágrafos curtos (1 a 2 frases). Cada parágrafo vai receber uma imagem.
 - Só fatos plausíveis e verificáveis; não invente dados.
-- Para cada parágrafo, inclua "imagem": um prompt em inglês para gerar a foto (cinematográfica, vertical 9:16, sem texto na imagem, sem pessoas reais identificáveis).
+- Para cada parágrafo, inclua "imagem": um prompt em inglês para gerar a foto (cinematográfica, vertical 9:16, sem texto na imagem, sem pessoas reais identificáveis). Esse prompt deve descrever só o visual neutro da cena (lugar, objetos, clima, época) e NUNCA conter nomes de grupos políticos, regimes, símbolos, guerras, armas, sangue, corpos ou personagens reais, porque os geradores de imagem bloqueiam esses termos (ex.: em vez de "navio nazista dos anos 1930", escreva "old 1930s steam research vessel in rough sea, black and white archival photo look").
 - "descricao": descrição para o YouTube em português: 1ª linha com o gancho (aparece antes do "ver mais"), 2 a 3 frases sobre o vídeo sem entregar o final, uma pergunta para gerar comentários e, no fim, 5 a 8 hashtags relevantes incluindo #shorts.
 Responda APENAS com JSON, sem markdown: {"titulo":"...","descricao":"...","paragrafos":[{"texto":"...","imagem":"..."}]}`;
   if (modo === "descricao") prompt = `Escreva a descrição de um YouTube Short em português do Brasil, a partir do título e da narração abaixo.
