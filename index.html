@@ -127,7 +127,7 @@ function render(){
     const r=document.createElement('div');
     const ta=document.createElement('textarea');ta.value=p.texto;ta.oninput=()=>{p.texto=ta.value;p.buf=null};
     const hint=document.createElement('div');hint.className='dica';hint.textContent=p.imagem?'Prompt da imagem: '+p.imagem:'';
-    if(p.img&&p.img.naturalWidth<720){const w=document.createElement('div');w.className='dica';w.style.color='#e07a5f';w.textContent=`⚠ Foto pequena (${p.img.naturalWidth}x${p.img.naturalHeight}px): vai ficar borrada no vídeo. O ideal é 1080 px de largura ou mais.`;r.append(w)}
+    if(p.orig&&p.orig.w<1000){const w=document.createElement('div');w.className='dica';w.style.color='#e07a5f';w.textContent=`⚠ Foto pequena (${p.orig.w}x${p.orig.h}px): ampliei e afiei automaticamente, mas ainda fica mais suave que uma foto de 1080 px ou mais.`;r.append(w)}
     const del=document.createElement('button');del.className='sec';del.textContent='Remover';del.style.marginTop='6px';
     del.onclick=()=>{P.splice(i,1);render()};
     const gi=document.createElement('button');gi.className='sec';gi.textContent='Gerar foto com IA';gi.style.cssText='margin:6px 8px 0 0';
@@ -137,9 +137,23 @@ function render(){
     r.append(ta,hint,gi,cp,del);d.append(th,r,f);L.append(d);
   });
 }
+// Fotos com menos de 1080 px de largura: amplia com boa suavização e aplica um leve realce de nitidez.
+// Não cria detalhe novo, só deixa a ampliação menos "mole".
+function nitidez(im){
+  const k=1080/im.naturalWidth;if(k<=1.05)return im;
+  try{
+    const c=document.createElement('canvas');c.width=1080;c.height=Math.round(im.naturalHeight*k);
+    const x=c.getContext('2d',{willReadFrequently:true});x.imageSmoothingQuality='high';x.drawImage(im,0,0,c.width,c.height);
+    const b=document.createElement('canvas');b.width=c.width;b.height=c.height;
+    const bx=b.getContext('2d',{willReadFrequently:true});bx.filter='blur(1.6px)';bx.drawImage(c,0,0);
+    const o=x.getImageData(0,0,c.width,c.height),l=bx.getImageData(0,0,c.width,c.height),a=o.data,d=l.data;
+    for(let n=0;n<a.length;n+=4)for(let q=0;q<3;q++){const v=a[n+q]+0.7*(a[n+q]-d[n+q]);a[n+q]=v<0?0:v>255?255:v}
+    x.putImageData(o,0,0);return c;
+  }catch{return im}
+}
 function setImg(i,file){
   return new Promise(ok=>{if(!file)return ok();const url=URL.createObjectURL(file);const im=new Image();
-  im.onload=()=>{P[i].img=im;P[i].url=url;render();ok()};im.src=url});
+  im.onload=()=>{P[i].orig={w:im.naturalWidth,h:im.naturalHeight};P[i].img=nitidez(im);P[i].url=url;render();ok()};im.src=url});
 }
 async function genImg(i){
   const p=P[i];if(!p.texto.trim()&&!p.imagem)throw new Error('Parágrafo vazio.');
