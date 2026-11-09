@@ -65,7 +65,8 @@ canvas{width:270px;height:480px;background:#000;border-radius:8px;border:1px sol
   <div class="bar">
     <button class="sec" id="bAdd">+ Parágrafo</button>
     <button id="bImgs">Gerar todas as fotos com IA</button>
-    <button class="sec" id="bPrompts">Copiar prompts das fotos</button>
+    <button class="sec" id="bPGrade">Copiar prompt da grade</button>
+    <button class="sec" id="bPrompts">Copiar prompts separados</button>
     <button class="sec" id="bGrade">Enviar imagem em grade (corta sozinho)</button>
     <input type="file" id="grade" accept="image/*" hidden>
     <label for="gc" style="margin:0">Colunas</label><input id="gc" type="number" min="1" max="8" value="4" style="width:64px">
@@ -162,6 +163,13 @@ $('grade').onchange=async e=>{
     }
     say(`${n} quadros cortados e colocados nos parágrafos 1 a ${n}, da esquerda para a direita e de cima para baixo.`);
   }catch(err){say('Erro ao cortar: '+err.message)}
+};
+$('bPGrade').onclick=()=>{
+  if(!P.length||P.some(p=>!p.texto.trim()&&!p.imagem))return say('Gere o roteiro primeiro.');
+  const n=P.length,cols=Math.min(4,n),rows=Math.ceil(n/cols);$('gc').value=cols;$('gl').value=rows;
+  const cel=P.map((p,i)=>`${i+1}) ${p.imagem||('Scene illustrating: '+p.texto.trim())}`).join('\n');
+  const t=`Create ONE single image that is a perfectly regular grid of ${n} separate photographs, ${cols} columns by ${rows} rows. Every cell must be exactly the same size, and each cell must be a tall vertical 9:16 portrait frame, so the whole image has a proportion of about ${cols*9}:${rows*16}. Separate the cells only with thin, straight, solid black lines (about 4 pixels). No rounded corners, no film borders, no outer frame, no vignette, no overlapping, no merged or bigger cells, no collage layout. Each photo fills its whole cell edge to edge. Style: cinematic, dark and moody, realistic photography, no text, no letters, no watermark, no recognizable real people. Do not skip or merge any cell. The photos, in order, left to right and then top to bottom:\n${cel}`;
+  navigator.clipboard.writeText(t).then(()=>say(`Prompt da grade copiado (${cols} colunas x ${rows} linhas, já ajustado ao lado do botão de grade). Cole no Gemini e depois envie a imagem.`),()=>say('Não consegui copiar.'));
 };
 $('bPrompts').onclick=()=>{
   const t=P.map((p,i)=>`${i+1}. ${p.imagem||('Scene illustrating: '+p.texto.trim())}. Cinematic, dark and moody, realistic, vertical 9:16, no text.`).join('\n');
