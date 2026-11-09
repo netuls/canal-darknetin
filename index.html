@@ -71,7 +71,14 @@ canvas{width:270px;height:480px;background:#000;border-radius:8px;border:1px sol
 </section>
 
 <section>
-  <h2>3. Voz e extras</h2>
+  <h2>3. Descrição do YouTube</h2>
+  <label for="desc">Texto para colar na descrição (a IA já cria junto com o roteiro)</label>
+  <textarea id="desc" style="min-height:150px"></textarea>
+  <div class="bar"><button class="sec" id="bDesc">Gerar descrição do roteiro atual</button><button class="sec" id="bCopia">Copiar descrição</button><button class="sec" id="bCopiaT">Copiar título</button></div>
+</section>
+
+<section>
+  <h2>4. Voz e extras</h2>
   <div class="row">
     <div><label for="voz">ID da voz na Fish Audio</label><input id="voz" placeholder="32 caracteres, final da URL da voz"></div>
     <div><label for="vel">Velocidade da fala</label><input id="vel" type="number" min="0.5" max="2" step="0.05" value="0.95"></div>
@@ -82,7 +89,7 @@ canvas{width:270px;height:480px;background:#000;border-radius:8px;border:1px sol
 </section>
 
 <section>
-  <h2>4. Prévia e vídeo</h2>
+  <h2>5. Prévia e vídeo</h2>
   <div class="pv">
     <canvas id="cv" width="1080" height="1920"></canvas>
     <div>
@@ -136,11 +143,26 @@ $('bGerar').onclick=async()=>{
     const r=await fetch('/api/roteiro',{method:'POST',signal:ab.signal,headers:{'Content-Type':'application/json','x-senha':$('senha').value},
       body:JSON.stringify({tema,assunto:$('assunto').value,duracao:+$('dur').value,tom:$('tom').value})});
     const d=await r.json();if(!r.ok)throw new Error(d.erro||r.status);
-    $('titulo').value=d.titulo||'';
+    $('titulo').value=d.titulo||'';$('desc').value=d.descricao||'';
     // mantém fotos já enviadas, na ordem
     P=d.paragrafos.map((p,i)=>({texto:p.texto,imagem:p.imagem,img:P[i]?.img,url:P[i]?.url}));
     render();say('Roteiro pronto. Edite se quiser e coloque as fotos.');
   }catch(e){say(e.name==='AbortError'?'Erro: demorou mais de 60s, tente de novo':'Erro: '+e.message)}clearInterval(tk);clearTimeout(to);b.disabled=false;
+};
+
+const copiar=async(t,ok)=>{try{await navigator.clipboard.writeText(t);say(ok)}catch{say('Não consegui copiar; selecione o texto e use Ctrl+C.')}};
+$('bCopia').onclick=()=>copiar($('desc').value,'Descrição copiada.');
+$('bCopiaT').onclick=()=>copiar($('titulo').value,'Título copiado.');
+$('bDesc').onclick=async()=>{
+  const texto=P.map(p=>p.texto.trim()).filter(Boolean).join(' ');
+  if(!texto)return say('Escreva ou gere o roteiro primeiro.');
+  const b=$('bDesc');b.disabled=true;say('Gerando descrição...');
+  try{
+    const r=await fetch('/api/roteiro',{method:'POST',headers:{'Content-Type':'application/json','x-senha':$('senha').value},
+      body:JSON.stringify({modo:'descricao',titulo:$('titulo').value,texto})});
+    const d=await r.json();if(!r.ok)throw new Error(d.erro||r.status);
+    $('desc').value=d.descricao||'';say('Descrição pronta.');
+  }catch(e){say('Erro: '+e.message)}b.disabled=false;
 };
 
 let AC;
