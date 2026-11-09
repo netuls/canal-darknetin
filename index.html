@@ -44,17 +44,30 @@ canvas{width:270px;height:480px;background:#000;border-radius:8px;border:1px sol
   <div class="row">
     <div><label for="tema">Tema do canal</label>
       <select id="tema">
-        <option>Mistérios não resolvidos</option><option>Crimes reais</option><option>Curiosidades sombrias da história</option>
-        <option>Fatos assustadores da ciência</option><option>Lendas e folclore brasileiro</option><option>Desastres e tragédias</option>
-        <option>Espaço e universo</option><option>Psicologia sombria</option><option>Lugares abandonados</option><option>Outro (digitar abaixo)</option>
+        <optgroup label="Canal dark">
+          <option data-estilo="dark">Mistérios não resolvidos</option><option data-estilo="dark">Crimes reais</option><option data-estilo="dark">Curiosidades sombrias da história</option>
+          <option data-estilo="dark">Fatos assustadores da ciência</option><option data-estilo="dark">Lendas e folclore brasileiro</option><option data-estilo="dark">Desastres e tragédias</option>
+          <option data-estilo="dark">Espaço e universo</option><option data-estilo="dark">Psicologia sombria</option><option data-estilo="dark">Lugares abandonados</option>
+        </optgroup>
+        <optgroup label="Infantil e animação">
+          <option data-estilo="anim3d">Histórias infantis para dormir</option><option data-estilo="desenho">Fábulas e contos de fadas originais</option>
+          <option data-estilo="anim3d">Animais fofos e curiosos</option><option data-estilo="anim3d">Ciência divertida para crianças</option>
+          <option data-estilo="anim3d">Aventuras animadas (desenho)</option><option data-estilo="desenho">Educativo: letras, números e cores</option>
+          <option data-estilo="desenho">Lendas do folclore para crianças</option><option data-estilo="anim3d">Super-heróis originais (animação)</option>
+        </optgroup>
+        <option data-estilo="dark">Outro (digitar abaixo)</option>
       </select></div>
     <div><label for="tom">Tom</label>
-      <select id="tom"><option>misterioso</option><option>sombrio e sério</option><option>documental</option><option>curioso e direto</option></select></div>
+      <select id="tom"><option>misterioso</option><option>sombrio e sério</option><option>documental</option><option>curioso e direto</option><option>alegre e animado</option><option>carinhoso (para dormir)</option><option>educativo e simples</option></select></div>
+    <div><label for="estilo">Estilo das imagens</label>
+      <select id="estilo"><option value="auto">Automático (pelo tema)</option><option value="dark">Sombrio e realista</option><option value="anim3d">Animação 3D colorida</option><option value="desenho">Desenho / ilustração infantil</option></select></div>
     <div><label for="dur">Duração (segundos)</label>
       <select id="dur"><option>30</option><option selected>45</option><option>60</option></select></div>
   </div>
   <label for="assunto">Assunto específico (opcional; vazio = a IA escolhe)</label>
   <input id="assunto" placeholder="Ex.: o desaparecimento do voo 19">
+  <label for="hist">Roteiros já feitos (a IA nunca repete; um por linha; pode colar os antigos)</label>
+  <textarea id="hist" style="min-height:90px" placeholder="Os novos roteiros entram aqui sozinhos."></textarea>
   <div class="bar"><button id="bGerar">Gerar roteiro com IA</button><span class="dica">Ou escreva/cole os parágrafos direto abaixo.</span></div>
 </section>
 
@@ -114,7 +127,10 @@ const $=id=>document.getElementById(id), W=1080, H=1920, GAP=0.15, FADE=0.25;
 const cv=$('cv'), g=cv.getContext('2d');g.imageSmoothingEnabled=true;g.imageSmoothingQuality='high';
 let P=[]; // {texto,imagem,img,buf,dur}
 const store=(k,v)=>{try{localStorage.setItem(k,v)}catch{}}, load=k=>{try{return localStorage.getItem(k)||''}catch{return ''}};
-['senha','voz','vel','legpos'].forEach(k=>{$(k).value=load('ed_'+k)||$(k).value;$(k).addEventListener('input',()=>store('ed_'+k,$(k).value))});
+['senha','voz','vel','legpos','estilo','tema','tom','hist'].forEach(k=>{$(k).value=load('ed_'+k)||$(k).value;$(k).addEventListener('input',()=>store('ed_'+k,$(k).value))});
+const ESTILOS={dark:'Cinematic, dark and moody, realistic photography',anim3d:'3D animated cartoon style, bright vibrant colors, soft lighting, cute friendly original characters, family-friendly',desenho:"colorful 2D children's book illustration, flat vibrant colors, friendly original characters, family-friendly"};
+const estiloAtual=()=>{const v=$('estilo').value;if(v!=='auto')return v;const o=$('tema').selectedOptions[0];return(o&&o.dataset.estilo)||'dark'};
+const sufixo=()=>'. '+ESTILOS[estiloAtual()]+', vertical 9:16, no text, no watermark.';
 const say=t=>$('msg').textContent=t;
 
 function render(){
@@ -134,7 +150,7 @@ function render(){
     const gi=document.createElement('button');gi.className='sec';gi.textContent='Gerar foto com IA';gi.style.cssText='margin:6px 8px 0 0';
     gi.onclick=async()=>{gi.disabled=true;try{await genImg(i)}catch(e){say('Erro: '+e.message)}gi.disabled=false};
     const cp=document.createElement('button');cp.className='sec';cp.textContent='Copiar prompt';cp.style.cssText='margin:6px 8px 0 0';
-    cp.onclick=()=>navigator.clipboard.writeText((p.imagem||('Scene illustrating: '+p.texto.trim()))+'. Cinematic, dark and moody, realistic photography, vertical 9:16, no text, no watermark.').then(()=>say(`Prompt ${i+1} copiado.`),()=>say('Não consegui copiar.'));
+    cp.onclick=()=>navigator.clipboard.writeText((p.imagem||('Scene illustrating: '+p.texto.trim()))+sufixo()).then(()=>say(`Prompt ${i+1} copiado.`),()=>say('Não consegui copiar.'));
     r.append(ta,hint,gi,cp,del);d.append(th,r,f);L.append(d);
   });
 }
@@ -160,7 +176,7 @@ async function genImg(i){
   const p=P[i];if(!p.texto.trim()&&!p.imagem)throw new Error('Parágrafo vazio.');
   say(`Gerando foto ${i+1} de ${P.length}...`);
   const r=await fetch('/api/imagem',{method:'POST',headers:{'Content-Type':'application/json','x-senha':$('senha').value},
-    body:JSON.stringify({prompt:p.imagem||('Scene illustrating: '+p.texto.trim())})});
+    body:JSON.stringify({prompt:p.imagem||('Scene illustrating: '+p.texto.trim()),estilo:ESTILOS[estiloAtual()]})});
   if(!r.ok){const d=await r.json().catch(()=>({}));throw new Error(d.erro||r.status)}
   await setImg(i,await r.blob());say(`Foto ${i+1} pronta.`);
 }
@@ -190,7 +206,7 @@ $('grade').onchange=async e=>{
 };
 let guia=false;
 const prox=()=>P.findIndex(p=>!p.img);
-const promptDe=p=>(p.imagem||('Scene illustrating: '+p.texto.trim()))+'. Cinematic, dark and moody, realistic photography, vertical 9:16, no text, no watermark.';
+const promptDe=p=>(p.imagem||('Scene illustrating: '+p.texto.trim()))+sufixo();
 async function guiaNext(){
   const i=prox();
   if(i<0){guia=false;$('bGuia').textContent='Modo guiado (Gemini)';return say('Todas as fotos estão preenchidas.')}
@@ -209,7 +225,7 @@ document.addEventListener('paste',async e=>{
 });
 const gradePrompt=(list,cols,rows)=>{
   const n=list.length,cel=list.map((p,i)=>`${i+1}) ${p.imagem||('Scene illustrating: '+p.texto.trim())}`).join('\n');
-  return `Create ONE single image that is a perfectly regular grid of ${n} separate photographs, ${cols} columns by ${rows} rows. Every cell must be exactly the same size, and each cell must be a tall vertical 9:16 portrait frame, so the whole image has a proportion of about ${cols*9}:${rows*16}. Separate the cells only with thin, straight, solid black lines (about 4 pixels). No rounded corners, no film borders, no outer frame, no vignette, no overlapping, no merged or bigger cells, no collage layout. Each photo fills its whole cell edge to edge. Style: cinematic, dark and moody, realistic photography, no text, no letters, no watermark, no recognizable real people. Do not skip or merge any cell. The photos, in order, left to right and then top to bottom:\n${cel}`;
+  return `Create ONE single image that is a perfectly regular grid of ${n} separate photographs, ${cols} columns by ${rows} rows. Every cell must be exactly the same size, and each cell must be a tall vertical 9:16 portrait frame, so the whole image has a proportion of about ${cols*9}:${rows*16}. Separate the cells only with thin, straight, solid black lines (about 4 pixels). No rounded corners, no film borders, no outer frame, no vignette, no overlapping, no merged or bigger cells, no collage layout. Each photo fills its whole cell edge to edge. Style: ${ESTILOS[estiloAtual()]}, no text, no letters, no watermark, no recognizable real people. Do not skip or merge any cell. The photos, in order, left to right and then top to bottom:\n${cel}`;
 };
 $('bPGrade').onclick=()=>{
   if(!P.length||P.some(p=>!p.texto.trim()&&!p.imagem))return say('Gere o roteiro primeiro.');
@@ -227,7 +243,7 @@ window.pegarPrompts=modo=>{
   return{tipo:'foto',prompts:P.map(promptDe),info:`${P.length} foto(s)`};
 };
 $('bPrompts').onclick=()=>{
-  const t=P.map((p,i)=>`${i+1}. ${p.imagem||('Scene illustrating: '+p.texto.trim())}. Cinematic, dark and moody, realistic, vertical 9:16, no text.`).join('\n');
+  const t=P.map((p,i)=>`${i+1}. ${p.imagem||('Scene illustrating: '+p.texto.trim())}.${sufixo().slice(1)}`).join('\n');
   navigator.clipboard.writeText(t).then(()=>say('Prompts copiados. Gere as imagens no Gemini/Copilot e envie pelo botão de várias fotos.'),()=>say('Não consegui copiar.'));
 };
 $('bImgs').onclick=async()=>{
@@ -244,19 +260,29 @@ $('lote').onchange=e=>{
   fs.forEach((f,i)=>setImg(i,f));
 };
 
+const tok=s=>new Set(s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]/g,' ').split(/\s+/).filter(w=>w.length>3));
+const parecido=(a,b)=>{const x=tok(a),y=tok(b);if(!x.size||!y.size)return false;let n=0;x.forEach(w=>y.has(w)&&n++);return n/Math.min(x.size,y.size)>=0.6};
+const lerHist=()=>$('hist').value.split('\n').map(s=>s.trim()).filter(Boolean);
 $('bGerar').onclick=async()=>{
   const b=$('bGerar');b.disabled=true;let sec=0;say('Gerando roteiro... 0s');const tk=setInterval(()=>say('Gerando roteiro... '+(++sec)+'s'),1000);
-  const ab=new AbortController(),to=setTimeout(()=>ab.abort(),60000);
+  const ab=new AbortController(),to=setTimeout(()=>ab.abort(),170000);
   try{
     let tema=$('tema').value;if(tema.startsWith('Outro'))tema=$('assunto').value||'curiosidades';
-    const r=await fetch('/api/roteiro',{method:'POST',signal:ab.signal,headers:{'Content-Type':'application/json','x-senha':$('senha').value},
-      body:JSON.stringify({tema,assunto:$('assunto').value,duracao:+$('dur').value,tom:$('tom').value})});
-    const d=await r.json();if(!r.ok)throw new Error(d.erro||r.status);
+    const extra=[];let d=null;
+    for(let t=0;t<3&&!d;t++){
+      const r=await fetch('/api/roteiro',{method:'POST',signal:ab.signal,headers:{'Content-Type':'application/json','x-senha':$('senha').value},
+        body:JSON.stringify({tema,assunto:$('assunto').value,duracao:+$('dur').value,tom:$('tom').value,estilo:estiloAtual()==='dark'?'escuro':'infantil',jaUsados:[...lerHist(),...extra].slice(-200)})});
+      const x=await r.json();if(!r.ok)throw new Error(x.erro||r.status);
+      const chave=`${x.titulo||''} ${x.assunto||''}`;
+      if(!lerHist().some(h=>parecido(h,chave)))d=x;
+      else{extra.push(`${x.titulo||''} — ${x.assunto||''}`);say(`Roteiro repetido, gerando outro (${t+1}/3)...`)}
+    }
+    if(!d)throw new Error('a IA insistiu em repetir assuntos já feitos. Mude o tema ou escreva um assunto específico novo.');
     $('titulo').value=d.titulo||'';$('desc').value=d.descricao||'';
-    // mantém fotos já enviadas, na ordem
-    P=d.paragrafos.map((p,i)=>({texto:p.texto,imagem:p.imagem,img:P[i]?.img,url:P[i]?.url}));
-    render();say('Roteiro pronto. Edite se quiser e coloque as fotos.');
-  }catch(e){say(e.name==='AbortError'?'Erro: demorou mais de 60s, tente de novo':'Erro: '+e.message)}clearInterval(tk);clearTimeout(to);b.disabled=false;
+    P=d.paragrafos.map(p=>({texto:p.texto,imagem:p.imagem}));
+    $('hist').value=lerHist().concat(`${d.titulo||''} — ${d.assunto||''}`).join('\n');store('ed_hist',$('hist').value);
+    render();say('Roteiro pronto (novo, sem repetir). Edite se quiser e coloque as fotos.');
+  }catch(e){say(e.name==='AbortError'?'Erro: demorou demais, tente de novo':'Erro: '+e.message)}clearInterval(tk);clearTimeout(to);b.disabled=false;
 };
 
 const copiar=async(t,ok)=>{try{await navigator.clipboard.writeText(t);say(ok)}catch{say('Não consegui copiar; selecione o texto e use Ctrl+C.')}};
@@ -268,7 +294,7 @@ $('bDesc').onclick=async()=>{
   const b=$('bDesc');b.disabled=true;say('Gerando descrição...');
   try{
     const r=await fetch('/api/roteiro',{method:'POST',headers:{'Content-Type':'application/json','x-senha':$('senha').value},
-      body:JSON.stringify({modo:'descricao',titulo:$('titulo').value,texto})});
+      body:JSON.stringify({modo:'descricao',titulo:$('titulo').value,texto,estilo:estiloAtual()==='dark'?'escuro':'infantil'})});
     const d=await r.json();if(!r.ok)throw new Error(d.erro||r.status);
     $('desc').value=d.descricao||'';say('Descrição pronta.');
   }catch(e){say('Erro: '+e.message)}b.disabled=false;
