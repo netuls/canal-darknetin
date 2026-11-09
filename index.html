@@ -92,6 +92,7 @@ canvas{width:270px;height:480px;background:#000;border-radius:8px;border:1px sol
     <div><label for="voz">ID da voz na Fish Audio</label><input id="voz" placeholder="32 caracteres, final da URL da voz"></div>
     <div><label for="vel">Velocidade da fala</label><input id="vel" type="number" min="0.5" max="2" step="0.05" value="1.05"></div>
     <div><label for="leg">Legenda</label><select id="leg"><option value="1">Ligada</option><option value="0">Desligada</option></select></div>
+    <div><label for="legpos">Posição da legenda</label><select id="legpos"><option value="0.5">Centro</option><option value="0.66" selected>Acima da descrição (recomendado)</option><option value="0.8">Baixo</option></select></div>
     <div><label for="mus">Música de fundo (opcional)</label><input id="mus" type="file" accept="audio/*"></div>
   </div>
   <div class="bar"><button id="bNar">Gerar narração</button><span id="msg" role="status"></span></div>
@@ -113,7 +114,7 @@ const $=id=>document.getElementById(id), W=1080, H=1920, GAP=0.15, FADE=0.25;
 const cv=$('cv'), g=cv.getContext('2d');g.imageSmoothingEnabled=true;g.imageSmoothingQuality='high';
 let P=[]; // {texto,imagem,img,buf,dur}
 const store=(k,v)=>{try{localStorage.setItem(k,v)}catch{}}, load=k=>{try{return localStorage.getItem(k)||''}catch{return ''}};
-['senha','voz','vel'].forEach(k=>{$(k).value=load('ed_'+k)||$(k).value;$(k).addEventListener('input',()=>store('ed_'+k,$(k).value))});
+['senha','voz','vel','legpos'].forEach(k=>{$(k).value=load('ed_'+k)||$(k).value;$(k).addEventListener('input',()=>store('ed_'+k,$(k).value))});
 const say=t=>$('msg').textContent=t;
 
 function render(){
@@ -309,8 +310,8 @@ function draw(t){
   const gr=g.createLinearGradient(0,H*.55,0,H);gr.addColorStop(0,'rgba(0,0,0,0)');gr.addColorStop(1,'rgba(0,0,0,.75)');g.fillStyle=gr;g.fillRect(0,H*.55,W,H*.45);
   if($('leg').value==='1'){
     g.font='800 68px system-ui,Arial,sans-serif';g.textAlign='center';g.lineJoin='round';g.lineWidth=14;
-    const ls=wrap(P[i].texto,W-140),y0=H-380-(ls.length-1)*40;
-    ls.forEach((l,n)=>{g.strokeStyle='#000';g.strokeText(l,W/2,y0+n*84);g.fillStyle='#fff';g.fillText(l,W/2,y0+n*84)});
+    const ls=wrap(P[i].texto,W-260),cx=W/2-30,y0=H*(+$('legpos').value||0.66)-(ls.length-1)*42;
+    ls.forEach((l,n)=>{g.strokeStyle='#000';g.strokeText(l,cx,y0+n*84);g.fillStyle='#fff';g.fillText(l,cx,y0+n*84)});
   }
 }
 const total=()=>P.reduce((s,p)=>s+p.dur,0);
