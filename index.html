@@ -109,7 +109,7 @@ canvas{width:270px;height:480px;background:#000;border-radius:8px;border:1px sol
 
 <script>
 const $=id=>document.getElementById(id), W=1080, H=1920, GAP=0.35, FADE=0.45;
-const cv=$('cv'), g=cv.getContext('2d');
+const cv=$('cv'), g=cv.getContext('2d');g.imageSmoothingEnabled=true;g.imageSmoothingQuality='high';
 let P=[]; // {texto,imagem,img,buf,dur}
 const store=(k,v)=>{try{localStorage.setItem(k,v)}catch{}}, load=k=>{try{return localStorage.getItem(k)||''}catch{return ''}};
 ['senha','voz','vel'].forEach(k=>{$(k).value=load('ed_'+k)||$(k).value;$(k).addEventListener('input',()=>store('ed_'+k,$(k).value))});
@@ -126,11 +126,14 @@ function render(){
     const r=document.createElement('div');
     const ta=document.createElement('textarea');ta.value=p.texto;ta.oninput=()=>{p.texto=ta.value;p.buf=null};
     const hint=document.createElement('div');hint.className='dica';hint.textContent=p.imagem?'Prompt da imagem: '+p.imagem:'';
+    if(p.img&&p.img.naturalWidth<720){const w=document.createElement('div');w.className='dica';w.style.color='#e07a5f';w.textContent=`⚠ Foto pequena (${p.img.naturalWidth}x${p.img.naturalHeight}px): vai ficar borrada no vídeo. O ideal é 1080 px de largura ou mais.`;r.append(w)}
     const del=document.createElement('button');del.className='sec';del.textContent='Remover';del.style.marginTop='6px';
     del.onclick=()=>{P.splice(i,1);render()};
     const gi=document.createElement('button');gi.className='sec';gi.textContent='Gerar foto com IA';gi.style.cssText='margin:6px 8px 0 0';
     gi.onclick=async()=>{gi.disabled=true;try{await genImg(i)}catch(e){say('Erro: '+e.message)}gi.disabled=false};
-    r.append(ta,hint,gi,del);d.append(th,r,f);L.append(d);
+    const cp=document.createElement('button');cp.className='sec';cp.textContent='Copiar prompt';cp.style.cssText='margin:6px 8px 0 0';
+    cp.onclick=()=>navigator.clipboard.writeText((p.imagem||('Scene illustrating: '+p.texto.trim()))+'. Cinematic, dark and moody, realistic photography, vertical 9:16, no text, no watermark.').then(()=>say(`Prompt ${i+1} copiado.`),()=>say('Não consegui copiar.'));
+    r.append(ta,hint,gi,cp,del);d.append(th,r,f);L.append(d);
   });
 }
 function setImg(i,file){
