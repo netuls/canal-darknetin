@@ -27,11 +27,15 @@ Regras:
 Responda APENAS com JSON, sem markdown: {"titulo":"...","paragrafos":[{"texto":"...","imagem":"..."}]}`;
 
   try {
-    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODELO}:generateContent`, {
+    const chamar = (thinking) => fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODELO}:generateContent`, {
       method: "POST",
+      signal: AbortSignal.timeout(40000),
       headers: { "x-goog-api-key": process.env.GEMINI_API_KEY, "content-type": "application/json" },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: "application/json", maxOutputTokens: 2500 } })
+      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { responseMimeType: "application/json", maxOutputTokens: 4000, ...(thinking ? { thinkingConfig: { thinkingLevel: "low" } } : {}) } })
     });
+    let r = await chamar(true);
+    if (r.status === 400) r = await chamar(false); // modelo que não aceita a opção de raciocínio
     if (!r.ok) { console.error("Gemini", r.status, await r.text()); return res.status(502).json({ erro: "IA respondeu " + r.status + (r.status === 429 ? " (limite gratuito, tente em 1 minuto)" : "") }); }
     const d = await r.json();
     const txt = (d.candidates?.[0]?.content?.parts || []).map(c => c.text || "").join("");
@@ -39,6 +43,6 @@ Responda APENAS com JSON, sem markdown: {"titulo":"...","paragrafos":[{"texto":"
     res.status(200).json(json);
   } catch (e) {
     console.error(e);
-    res.status(500).json({ erro: "falha ao gerar o roteiro" });
+    res.status(500).json({ erro: e.name === "TimeoutError" ? "a IA demorou demais, tente de novo" : "falha ao gerar o roteiro (resposta inválida da IA)" });
   }
 };
