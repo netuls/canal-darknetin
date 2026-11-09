@@ -2,7 +2,7 @@
 // Variáveis de ambiente no Vercel: GEMINI_API_KEY e APP_SENHA
 // Se o modelo sair do ar, veja o nome atual em aistudio.google.com e troque aqui.
 // Tenta cada modelo em ordem; se um não responder em 20 s ou não existir, passa para o próximo.
-const MODELOS = [process.env.GEMINI_MODEL, "gemini-flash-latest", "gemini-flash-lite-latest"].filter(Boolean);
+const MODELOS = [process.env.GEMINI_MODEL, "gemini-flash-latest", "gemini-flash-lite-latest", "gemini-2.5-flash", "gemini-2.5-flash-lite"].filter(Boolean);
 
 module.exports = async (req, res) => {
   res.setHeader("Cache-Control", "no-store");
@@ -29,25 +29,33 @@ Responda APENAS com JSON, sem markdown: {"titulo":"...","paragrafos":[{"texto":"
 
   const chamar = (modelo, thinking) => fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent`, {
     method: "POST",
-    signal: AbortSignal.timeout(20000),
+    signal: AbortSignal.timeout(15000),
     headers: { "x-goog-api-key": process.env.GEMINI_API_KEY, "content-type": "application/json" },
     body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }],
       generationConfig: { responseMimeType: "application/json", maxOutputTokens: 3000, ...(thinking ? { thinkingConfig: { thinkingLevel: "low" } } : {}) } })
   });
-  const falhas = [];
+  const falhas = [], inicio = Date.now(), esperar = ms => new Promise(r => setTimeout(r, ms));
   for (const modelo of MODELOS) {
-    try {
-      let r = await chamar(modelo, true);
-      if (r.status === 400) r = await chamar(modelo, false);
-      if (!r.ok) { const t = await r.text(); console.error("Gemini", modelo, r.status, t); falhas.push(modelo + ": " + r.status); if (r.status === 429 || r.status === 403 || r.status === 401) break; continue; }
-      const d = await r.json();
-      const txt = (d.candidates?.[0]?.content?.parts || []).map(c => c.text || "").join("");
-      const json = JSON.parse(txt.slice(txt.indexOf("{"), txt.lastIndexOf("}") + 1));
-      return res.status(200).json(json);
-    } catch (e) {
-      console.error("Gemini", modelo, e.name, e.message);
-      falhas.push(modelo + ": " + (e.name === "TimeoutError" ? "sem resposta em 20s" : "resposta inválida"));
+    for (let tentativa = 1; tentativa <= 2; tentativa++) {
+      if (Date.now() - inicio > 45000) break;
+      try {
+        let r = await chamar(modelo, true);
+        if (r.status === 400) r = await chamar(modelo, false);
+        if (!r.ok) {
+          console.error("Gemini", modelo, r.status, await r.text()); falhas.push(modelo + ": " + r.status);
+          if (r.status === 429 || r.status === 403 || r.status === 401) return res.status(502).json({ erro: "Gemini recusou (" + r.status + "): limite grátis atingido ou chave inválida. Espere 1 minuto e tente de novo." });
+          if (r.status === 503 && tentativa === 1) { await esperar(2000); continue; } // sobrecarga: tenta de novo
+          break; // outro erro: próximo modelo
+        }
+        const d = await r.json();
+        const txt = (d.candidates?.[0]?.content?.parts || []).map(c => c.text || "").join("");
+        return res.status(200).json(JSON.parse(txt.slice(txt.indexOf("{"), txt.lastIndexOf("}") + 1)));
+      } catch (e) {
+        console.error("Gemini", modelo, e.name, e.message);
+        falhas.push(modelo + ": " + (e.name === "TimeoutError" ? "sem resposta" : "resposta inválida"));
+        break;
+      }
     }
   }
-  res.status(502).json({ erro: "IA indisponível agora (" + falhas.join(" | ") + "). Veja se a chave é do aistudio.google.com e tente de novo." });
+  res.status(502).json({ erro: "O Gemini está sobrecarregado agora (" + falhas.join(" | ") + "). Tente de novo em 1 minuto." });
 };
