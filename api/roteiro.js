@@ -1,11 +1,12 @@
-// Função do Vercel: gera o roteiro de um Short com IA (Claude).
-// Variáveis de ambiente no Vercel: ANTHROPIC_API_KEY e APP_SENHA
-const MODELO = "claude-sonnet-5-5";
+// Função do Vercel: gera o roteiro de um Short com IA (Google Gemini, plano gratuito).
+// Variáveis de ambiente no Vercel: GEMINI_API_KEY e APP_SENHA
+// Se o modelo sair do ar, veja o nome atual em aistudio.google.com e troque aqui.
+const MODELO = "gemini-3.8-flash";
 
 module.exports = async (req, res) => {
   res.setHeader("Cache-Control", "no-store");
   if (req.method !== "POST") return res.status(405).json({ erro: "use POST" });
-  if (!process.env.ANTHROPIC_API_KEY) return res.status(500).json({ erro: "ANTHROPIC_API_KEY não configurada no Vercel" });
+  if (!process.env.GEMINI_API_KEY) return res.status(500).json({ erro: "GEMINI_API_KEY não configurada no Vercel" });
   if (process.env.APP_SENHA && req.headers["x-senha"] !== process.env.APP_SENHA) return res.status(401).json({ erro: "senha incorreta" });
 
   const { tema = "", assunto = "", duracao = 45, tom = "misterioso" } = req.body || {};
@@ -26,14 +27,14 @@ Regras:
 Responda APENAS com JSON, sem markdown: {"titulo":"...","paragrafos":[{"texto":"...","imagem":"..."}]}`;
 
   try {
-    const r = await fetch("https://api.anthropic.com/v1/messages", {
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODELO}:generateContent`, {
       method: "POST",
-      headers: { "x-api-key": process.env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-      body: JSON.stringify({ model: MODELO, max_tokens: 2000, messages: [{ role: "user", content: prompt }] })
+      headers: { "x-goog-api-key": process.env.GEMINI_API_KEY, "content-type": "application/json" },
+      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: "application/json", maxOutputTokens: 2500 } })
     });
-    if (!r.ok) { console.error("Anthropic", r.status, await r.text()); return res.status(502).json({ erro: "IA respondeu " + r.status }); }
+    if (!r.ok) { console.error("Gemini", r.status, await r.text()); return res.status(502).json({ erro: "IA respondeu " + r.status + (r.status === 429 ? " (limite gratuito, tente em 1 minuto)" : "") }); }
     const d = await r.json();
-    const txt = d.content.map(c => c.text || "").join("");
+    const txt = (d.candidates?.[0]?.content?.parts || []).map(c => c.text || "").join("");
     const json = JSON.parse(txt.slice(txt.indexOf("{"), txt.lastIndexOf("}") + 1));
     res.status(200).json(json);
   } catch (e) {
