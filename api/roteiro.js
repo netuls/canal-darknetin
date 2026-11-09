@@ -10,10 +10,10 @@ module.exports = async (req, res) => {
   if (!process.env.GEMINI_API_KEY) return res.status(500).json({ erro: "GEMINI_API_KEY não configurada no Vercel" });
   if (process.env.APP_SENHA && req.headers["x-senha"] !== process.env.APP_SENHA) return res.status(401).json({ erro: "senha incorreta" });
 
-  const { tema = "", assunto = "", duracao = 45, tom = "misterioso" } = req.body || {};
+  const { tema = "", assunto = "", duracao = 45, tom = "misterioso", modo = "", titulo = "", texto = "" } = req.body || {};
   const dur = Math.min(Math.max(Number(duracao) || 45, 15), 60);
   const palavras = Math.round(dur * 2.3);
-  const prompt = `Crie o roteiro narrado de um YouTube Short (vertical) de canal dark, em português do Brasil.
+  let prompt = `Crie o roteiro narrado de um YouTube Short (vertical) de canal dark, em português do Brasil.
 Tema do canal: ${String(tema).slice(0, 100)}
 Assunto específico: ${String(assunto).slice(0, 300) || "escolha um assunto pouco conhecido e intrigante dentro do tema"}
 Tom: ${String(tom).slice(0, 50)}
@@ -25,7 +25,13 @@ Regras:
 - Divida em 6 a 9 parágrafos curtos (1 a 2 frases). Cada parágrafo vai receber uma imagem.
 - Só fatos plausíveis e verificáveis; não invente dados.
 - Para cada parágrafo, inclua "imagem": um prompt em inglês para gerar a foto (cinematográfica, vertical 9:16, sem texto na imagem, sem pessoas reais identificáveis).
-Responda APENAS com JSON, sem markdown: {"titulo":"...","paragrafos":[{"texto":"...","imagem":"..."}]}`;
+- "descricao": descrição para o YouTube em português: 1ª linha com o gancho (aparece antes do "ver mais"), 2 a 3 frases sobre o vídeo sem entregar o final, uma pergunta para gerar comentários e, no fim, 5 a 8 hashtags relevantes incluindo #shorts.
+Responda APENAS com JSON, sem markdown: {"titulo":"...","descricao":"...","paragrafos":[{"texto":"...","imagem":"..."}]}`;
+  if (modo === "descricao") prompt = `Escreva a descrição de um YouTube Short em português do Brasil, a partir do título e da narração abaixo.
+Formato: 1ª linha com o gancho (aparece antes do "ver mais"), 2 a 3 frases sobre o vídeo sem entregar o final, uma pergunta para gerar comentários e, no fim, 5 a 8 hashtags relevantes incluindo #shorts. Use só o que está na narração.
+Título: ${String(titulo).slice(0, 150)}
+Narração: ${String(texto).slice(0, 3000)}
+Responda APENAS com JSON, sem markdown: {"descricao":"..."}`;
 
   const chamar = (modelo, thinking) => fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent`, {
     method: "POST",
