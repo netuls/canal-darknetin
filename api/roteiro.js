@@ -20,9 +20,14 @@ Tom: ${String(tom).slice(0, 50)}
 Duração: cerca de ${dur} segundos (~${palavras} palavras no total).
 
 Regras:
-- O primeiro parágrafo é um gancho forte que prende nos 3 primeiros segundos.
-- Termine com um fecho curto que gere curiosidade ou comentário.
-- Divida em 6 a 9 parágrafos curtos (1 a 2 frases). Cada parágrafo vai receber uma imagem.
+Regras de retenção (o algoritmo de Shorts testa o vídeo num grupo pequeno e mede quem NÃO desliza nos 2 primeiros segundos, quem assiste até o fim e quem reassiste; o roteiro precisa servir a isso):
+- GANCHO: o 1º parágrafo é uma única frase curta (até ~12 palavras), agressiva e impossível de ignorar, que gera curiosidade ou choque. Proibido começar com saudação, apresentação, "neste vídeo", contexto ou data solta.
+- A imagem do 1º parágrafo deve ser a mais impactante e chocante visualmente do vídeo (precisa prender em 0,2 s).
+- RITMO: frases curtas e diretas, zero enrolação e zero explicação desnecessária. Cada parágrafo traz uma informação nova ou aumenta a tensão. Sem repetir ideias.
+- Divida em 6 a 9 parágrafos de 1 frase (no máximo 2 bem curtas). Cada parágrafo vai receber uma imagem.
+- FINAL ABERTO: não resolva tudo. Termine com uma pergunta ou um detalhe inquietante que deixe a sensação de "preciso ver de novo" e convide a comentar. A última frase deve poder emendar naturalmente com a primeira (efeito de loop), para estimular o rewatch. Nunca prometa no gancho algo que o vídeo não entrega.
+- CONSISTÊNCIA VISUAL: todos os prompts de imagem devem manter o mesmo estilo (paleta, iluminação, enquadramento), para o vídeo ter um padrão visual repetido.
+- "titulo": curto (até 60 caracteres), que gere curiosidade sem mentir.
 - Só fatos plausíveis e verificáveis; não invente dados.
 - Para cada parágrafo, inclua "imagem": um prompt em inglês para gerar a foto (cinematográfica, vertical 9:16, sem texto na imagem, sem pessoas reais identificáveis). Esse prompt deve descrever só o visual neutro da cena (lugar, objetos, clima, época) e NUNCA conter nomes de grupos políticos, regimes, símbolos, guerras, armas, sangue, corpos ou personagens reais, porque os geradores de imagem bloqueiam esses termos (ex.: em vez de "navio nazista dos anos 1930", escreva "old 1930s steam research vessel in rough sea, black and white archival photo look").
 - "descricao": descrição para o YouTube em português: 1ª linha com o gancho (aparece antes do "ver mais"), 2 a 3 frases sobre o vídeo sem entregar o final, uma pergunta para gerar comentários e, no fim, 5 a 8 hashtags relevantes incluindo #shorts.
