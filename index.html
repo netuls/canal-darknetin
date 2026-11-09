@@ -65,6 +65,7 @@ canvas{width:270px;height:480px;background:#000;border-radius:8px;border:1px sol
   <div class="bar">
     <button class="sec" id="bAdd">+ Parágrafo</button>
     <button id="bImgs">Gerar todas as fotos com IA</button>
+    <button class="sec" id="bPrompts">Copiar prompts das fotos</button>
     <button class="sec" id="bLote">Enviar várias fotos de uma vez</button>
     <input type="file" id="lote" accept="image/*" multiple hidden>
   </div>
@@ -138,6 +139,10 @@ async function genImg(i){
   if(!r.ok){const d=await r.json().catch(()=>({}));throw new Error(d.erro||r.status)}
   await setImg(i,await r.blob());say(`Foto ${i+1} pronta.`);
 }
+$('bPrompts').onclick=()=>{
+  const t=P.map((p,i)=>`${i+1}. ${p.imagem||('Scene illustrating: '+p.texto.trim())}. Cinematic, dark and moody, realistic, vertical 9:16, no text.`).join('\n');
+  navigator.clipboard.writeText(t).then(()=>say('Prompts copiados. Gere as imagens no Gemini/Copilot e envie pelo botão de várias fotos.'),()=>say('Não consegui copiar.'));
+};
 $('bImgs').onclick=async()=>{
   const b=$('bImgs');b.disabled=true;let n=0;
   try{for(let i=0;i<P.length;i++){if(P[i].img)continue;await genImg(i);n++;await new Promise(r=>setTimeout(r,1500))}say(n?`${n} foto(s) geradas.`:'Todos os parágrafos já têm foto.')}
