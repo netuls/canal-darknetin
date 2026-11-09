@@ -66,6 +66,11 @@ canvas{width:270px;height:480px;background:#000;border-radius:8px;border:1px sol
     <button class="sec" id="bAdd">+ Parágrafo</button>
     <button id="bImgs">Gerar todas as fotos com IA</button>
     <button class="sec" id="bPrompts">Copiar prompts das fotos</button>
+    <button class="sec" id="bGrade">Enviar imagem em grade (corta sozinho)</button>
+    <input type="file" id="grade" accept="image/*" hidden>
+    <label for="gc" style="margin:0">Colunas</label><input id="gc" type="number" min="1" max="8" value="4" style="width:64px">
+    <label for="gl" style="margin:0">Linhas</label><input id="gl" type="number" min="1" max="8" value="2" style="width:64px">
+    <label for="gm" style="margin:0" title="Pixels descartados em cada borda de cada quadro, para tirar as linhas de separação">Borda</label><input id="gm" type="number" min="0" max="40" value="3" style="width:64px">
     <button class="sec" id="bLote">Enviar várias fotos de uma vez</button>
     <input type="file" id="lote" accept="image/*" multiple hidden>
   </div>
@@ -139,6 +144,25 @@ async function genImg(i){
   if(!r.ok){const d=await r.json().catch(()=>({}));throw new Error(d.erro||r.status)}
   await setImg(i,await r.blob());say(`Foto ${i+1} pronta.`);
 }
+$('bGrade').onclick=()=>$('grade').click();
+$('grade').onchange=async e=>{
+  const f=e.target.files[0];e.target.value='';if(!f)return;
+  const cols=+$('gc').value||1,rows=+$('gl').value||1,m=Math.max(0,+$('gm').value||0),n=cols*rows;
+  say('Cortando a imagem...');
+  try{
+    const im=new Image();im.src=URL.createObjectURL(f);await im.decode();
+    const cw=im.width/cols,ch=im.height/rows;
+    while(P.length<n)P.push({texto:'',imagem:''});
+    for(let k=0;k<n;k++){
+      const c=k%cols,r=Math.floor(k/cols),sx=c*cw+m,sy=r*ch+m,sw=cw-2*m,sh=ch-2*m;
+      const cn=document.createElement('canvas');cn.width=Math.round(sw);cn.height=Math.round(sh);
+      cn.getContext('2d').drawImage(im,sx,sy,sw,sh,0,0,cn.width,cn.height);
+      const blob=await new Promise(ok=>cn.toBlob(ok,'image/jpeg',0.95));
+      await setImg(k,blob);
+    }
+    say(`${n} quadros cortados e colocados nos parágrafos 1 a ${n}, da esquerda para a direita e de cima para baixo.`);
+  }catch(err){say('Erro ao cortar: '+err.message)}
+};
 $('bPrompts').onclick=()=>{
   const t=P.map((p,i)=>`${i+1}. ${p.imagem||('Scene illustrating: '+p.texto.trim())}. Cinematic, dark and moody, realistic, vertical 9:16, no text.`).join('\n');
   navigator.clipboard.writeText(t).then(()=>say('Prompts copiados. Gere as imagens no Gemini/Copilot e envie pelo botão de várias fotos.'),()=>say('Não consegui copiar.'));
