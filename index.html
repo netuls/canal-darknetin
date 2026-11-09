@@ -129,17 +129,18 @@ $('lote').onchange=e=>{
 };
 
 $('bGerar').onclick=async()=>{
-  const b=$('bGerar');b.disabled=true;say('Gerando roteiro...');
+  const b=$('bGerar');b.disabled=true;let sec=0;say('Gerando roteiro... 0s');const tk=setInterval(()=>say('Gerando roteiro... '+(++sec)+'s'),1000);
+  const ab=new AbortController(),to=setTimeout(()=>ab.abort(),60000);
   try{
     let tema=$('tema').value;if(tema.startsWith('Outro'))tema=$('assunto').value||'curiosidades';
-    const r=await fetch('/api/roteiro',{method:'POST',headers:{'Content-Type':'application/json','x-senha':$('senha').value},
+    const r=await fetch('/api/roteiro',{method:'POST',signal:ab.signal,headers:{'Content-Type':'application/json','x-senha':$('senha').value},
       body:JSON.stringify({tema,assunto:$('assunto').value,duracao:+$('dur').value,tom:$('tom').value})});
     const d=await r.json();if(!r.ok)throw new Error(d.erro||r.status);
     $('titulo').value=d.titulo||'';
     // mantém fotos já enviadas, na ordem
     P=d.paragrafos.map((p,i)=>({texto:p.texto,imagem:p.imagem,img:P[i]?.img,url:P[i]?.url}));
     render();say('Roteiro pronto. Edite se quiser e coloque as fotos.');
-  }catch(e){say('Erro: '+e.message)}b.disabled=false;
+  }catch(e){say(e.name==='AbortError'?'Erro: demorou mais de 60s, tente de novo':'Erro: '+e.message)}clearInterval(tk);clearTimeout(to);b.disabled=false;
 };
 
 let AC;
