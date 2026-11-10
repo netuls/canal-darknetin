@@ -105,6 +105,7 @@ canvas{width:270px;height:480px;background:#000;border-radius:8px;border:1px sol
   <label for="desc">Texto para colar na descrição (a IA já cria junto com o roteiro)</label>
   <textarea id="desc" style="min-height:150px"></textarea>
   <div class="dica" id="platHint"></div>
+  <div class="dica">Para enviar ao YouTube: grave o vídeo na seção 5 (assim a extensão anexa o arquivo sozinha) e clique em "Enviar ao YouTube" no ícone da extensão. Ela preenche título e descrição; você confere e publica.</div>
   <div class="bar"><button class="sec" id="bDesc">Gerar descrição do roteiro atual</button><button class="sec" id="bCopia">Copiar descrição</button><button class="sec" id="bCopiaT">Copiar título</button></div>
 </section>
 
@@ -264,6 +265,18 @@ window.pegarPrompts=modo=>{
   }
   return{tipo:'foto',prompts:P.map(promptDe),info:`${P.length} foto(s)`};
 };
+// Ponte usada pela extensão para o envio ao YouTube: título, descrição e o último vídeo gravado (se houver).
+window.pegarPublicacao=()=>{
+  const titulo=$('titulo').value.trim(),descricao=$('desc').value.trim();
+  if(!titulo)return{erro:'Gere o roteiro no estúdio primeiro (falta o título).'};
+  const v=window.__ultimoVideo;
+  return{titulo,descricao,plataforma:$('plat').value,video:v?{nome:v.nome,tipo:v.blob.type||'video/mp4',tamanho:v.blob.size}:null};
+};
+window.pegarVideoParte=(k,tam)=>new Promise((ok,no)=>{
+  const v=window.__ultimoVideo;if(!v)return no(new Error('sem vídeo gravado'));
+  const r=new FileReader();r.onload=()=>ok(String(r.result).split(',')[1]);r.onerror=()=>no(r.error);
+  r.readAsDataURL(v.blob.slice(k*tam,(k+1)*tam));
+});
 $('bPrompts').onclick=()=>{
   const t=P.map((p,i)=>`${i+1}. ${p.imagem||('Scene illustrating: '+p.texto.trim())}.${sufixo().slice(1)}`).join('\n');
   navigator.clipboard.writeText(t).then(()=>say('Prompts copiados. Gere as imagens no Gemini/Copilot e envie pelo botão de várias fotos.'),()=>say('Não consegui copiar.'));
@@ -390,8 +403,10 @@ async function play(rec){
   if(rec){
     await new Promise(r=>{mr.onstop=r;mr.stop()});
     const ext=mime.includes('mp4')?'mp4':'webm',a=document.createElement('a');
-    a.href=URL.createObjectURL(new Blob(chunks,{type:mime.split(';')[0]}));
-    a.download=(($('titulo').value||'short').replace(/[^\w\-]+/g,'_').slice(0,50))+'.'+ext;a.click();say($('plat').value==='tiktok'&&ext!=='mp4'?'Vídeo baixado em WebM. Para o TikTok, converta para MP4 (CapCut ou HandBrake) antes de postar.':'Vídeo baixado ('+ext+').');
+    const vblob=new Blob(chunks,{type:mime.split(';')[0]}),vnome=(($('titulo').value||'short').replace(/[^\w\-]+/g,'_').slice(0,50))+'.'+ext;
+    window.__ultimoVideo={blob:vblob,nome:vnome}; // a extensão usa este vídeo no envio ao YouTube
+    a.href=URL.createObjectURL(vblob);
+    a.download=vnome;a.click();say($('plat').value==='tiktok'&&ext!=='mp4'?'Vídeo baixado em WebM. Para o TikTok, converta para MP4 (CapCut ou HandBrake) antes de postar.':'Vídeo baixado ('+ext+').');
   }
 }
 async function run(rec){
