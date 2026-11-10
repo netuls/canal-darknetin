@@ -81,6 +81,7 @@ canvas{width:270px;height:480px;background:#000;border-radius:8px;border:1px sol
 <section>
   <h2>2. Parágrafos e fotos</h2>
   <label for="titulo">Título</label><input id="titulo">
+  <div class="dica" id="estim"></div>
   <div id="lista"></div>
   <div class="bar">
     <button class="sec" id="bAdd">+ Parágrafo</button>
@@ -103,6 +104,7 @@ canvas{width:270px;height:480px;background:#000;border-radius:8px;border:1px sol
   <h2>3. Descrição do YouTube</h2>
   <label for="desc">Texto para colar na descrição (a IA já cria junto com o roteiro)</label>
   <textarea id="desc" style="min-height:150px"></textarea>
+  <div class="dica" id="platHint"></div>
   <div class="bar"><button class="sec" id="bDesc">Gerar descrição do roteiro atual</button><button class="sec" id="bCopia">Copiar descrição</button><button class="sec" id="bCopiaT">Copiar título</button></div>
 </section>
 
@@ -112,7 +114,8 @@ canvas{width:270px;height:480px;background:#000;border-radius:8px;border:1px sol
     <div><label for="voz">ID da voz na Fish Audio</label><input id="voz" placeholder="32 caracteres, final da URL da voz"></div>
     <div><label for="vel">Velocidade da fala</label><input id="vel" type="number" min="0.5" max="2" step="0.05" value="1.05"></div>
     <div><label for="leg">Legenda</label><select id="leg"><option value="1">Ligada</option><option value="0">Desligada</option></select></div>
-    <div><label for="legpos">Posição da legenda</label><select id="legpos"><option value="0.5">Centro</option><option value="0.66" selected>Acima da descrição (recomendado)</option><option value="0.8">Baixo</option></select></div>
+    <div><label for="plat">Plataforma</label><select id="plat"><option value="youtube">YouTube Shorts</option><option value="tiktok">TikTok</option></select></div>
+    <div><label for="legpos">Posição da legenda</label><select id="legpos"><option value="0.5">Centro</option><option value="0.58">Acima da legenda do TikTok</option><option value="0.66" selected>Acima da descrição (recomendado)</option><option value="0.8">Baixo</option></select></div>
     <div><label for="mus">Música de fundo (opcional)</label><input id="mus" type="file" accept="audio/*"></div>
   </div>
   <div class="bar"><button id="bNar">Gerar narração</button><span id="msg" role="status"></span></div>
@@ -134,14 +137,23 @@ const $=id=>document.getElementById(id), W=1080, H=1920, GAP=0.15, FADE=0.25;
 const cv=$('cv'), g=cv.getContext('2d');g.imageSmoothingEnabled=true;g.imageSmoothingQuality='high';
 let P=[]; // {texto,imagem,img,buf,dur}
 const store=(k,v)=>{try{localStorage.setItem(k,v)}catch{}}, load=k=>{try{return localStorage.getItem(k)||''}catch{return ''}};
-['senha','voz','vel','legpos','estilo','tema','tom','hist'].forEach(k=>{$(k).value=load('ed_'+k)||$(k).value;$(k).addEventListener('input',()=>store('ed_'+k,$(k).value))});
+['senha','voz','vel','plat','legpos','estilo','tema','tom','hist'].forEach(k=>{$(k).value=load('ed_'+k)||$(k).value;$(k).addEventListener('input',()=>{store('ed_'+k,$(k).value);if(k==='vel')estim()})});
 const ESTILOS={dark:'Cinematic, dark and moody, realistic photography',anim3d:'3D animated cartoon style, bright vibrant colors, soft lighting, cute friendly original characters, family-friendly',desenho:"colorful 2D children's book illustration, flat vibrant colors, friendly original characters, family-friendly",emocao:'warm emotional storybook illustration, soft golden light, cinematic composition, painterly, tender atmosphere, original characters, family-friendly'};
 let estiloSorteado=null;
 const tipoServidor=()=>({dark:'escuro',emocao:'emocional'}[estiloAtual()]||'infantil');
 const estiloAtual=()=>{const v=$('estilo').value;if(v!=='auto')return v;const o=$('tema').selectedOptions[0];if(o&&o.dataset.surpresa)return estiloSorteado||'dark';return(o&&o.dataset.estilo)||'dark'};
 const sufixo=()=>'. '+ESTILOS[estiloAtual()]+', vertical 9:16, no text, no watermark.';
+const updPlat=mudou=>{
+  const tk=$('plat').value==='tiktok';
+  if(mudou){$('legpos').value=tk?'0.58':'0.66';store('ed_legpos',$('legpos').value)}
+  $('platHint').textContent=tk?'TikTok: ative o rótulo de conteúdo gerado por IA ao postar, e troque as hashtags pelas do seu nicho se quiser. Se o vídeo sair em WebM, converta para MP4 antes de postar.':'';
+};
 const say=t=>$('msg').textContent=t;
 
+function estim(){
+  const w=P.reduce((s,p)=>s+p.texto.trim().split(/\s+/).filter(Boolean).length,0),v=+$('vel').value||1;
+  $('estim').textContent=w?`${w} palavras ≈ ${Math.round(w/(2.6*v))} s de narração (estimativa; o tempo real aparece depois de gerar a narração)`:'';
+}
 function render(){
   const L=$('lista');L.innerHTML='';
   P.forEach((p,i)=>{
@@ -151,7 +163,7 @@ function render(){
     const f=document.createElement('input');f.type='file';f.accept='image/*';f.hidden=true;
     f.onchange=()=>setImg(i,f.files[0]);th.onclick=()=>f.click();th.onkeydown=e=>{if(e.key==='Enter')f.click()};
     const r=document.createElement('div');
-    const ta=document.createElement('textarea');ta.value=p.texto;ta.oninput=()=>{p.texto=ta.value;p.buf=null};
+    const ta=document.createElement('textarea');ta.value=p.texto;ta.oninput=()=>{p.texto=ta.value;p.buf=null;estim()};
     const hint=document.createElement('div');hint.className='dica';hint.textContent=p.imagem?'Prompt da imagem: '+p.imagem:'';
     if(p.orig&&p.orig.w<1000){const w=document.createElement('div');w.className='dica';w.style.color='#e07a5f';w.textContent=`⚠ Foto pequena (${p.orig.w}x${p.orig.h}px): ampliei e afiei automaticamente, mas ainda fica mais suave que uma foto de 1080 px ou mais.`;r.append(w)}
     const del=document.createElement('button');del.className='sec';del.textContent='Remover';del.style.marginTop='6px';
@@ -162,6 +174,7 @@ function render(){
     cp.onclick=()=>navigator.clipboard.writeText((p.imagem||('Scene illustrating: '+p.texto.trim()))+sufixo()).then(()=>say(`Prompt ${i+1} copiado.`),()=>say('Não consegui copiar.'));
     r.append(ta,hint,gi,cp,del);d.append(th,r,f);L.append(d);
   });
+  estim();
 }
 // Fotos com menos de 1080 px de largura: amplia com boa suavização e aplica um leve realce de nitidez.
 // Não cria detalhe novo, só deixa a ampliação menos "mole".
@@ -286,7 +299,7 @@ $('bGerar').onclick=async()=>{
     const extra=[];let d=null;
     for(let t=0;t<3&&!d;t++){
       const r=await fetch('/api/roteiro',{method:'POST',signal:ab.signal,headers:{'Content-Type':'application/json','x-senha':$('senha').value},
-        body:JSON.stringify({tema,assunto:$('assunto').value,duracao:+$('dur').value,tom:$('tom').value,estilo:tipoServidor(),jaUsados:[...lerHist(),...extra].slice(-200)})});
+        body:JSON.stringify({tema,assunto:$('assunto').value,duracao:+$('dur').value,tom:$('tom').value,estilo:tipoServidor(),plataforma:$('plat').value,jaUsados:[...lerHist(),...extra].slice(-200)})});
       const x=await r.json();if(!r.ok)throw new Error(x.erro||r.status);
       const chave=`${x.titulo||''} ${x.assunto||''}`;
       if(!lerHist().some(h=>parecido(h,chave)))d=x;
@@ -300,6 +313,7 @@ $('bGerar').onclick=async()=>{
   }catch(e){say(e.name==='AbortError'?'Erro: demorou demais, tente de novo':'Erro: '+e.message)}clearInterval(tk);clearTimeout(to);b.disabled=false;
 };
 
+$('plat').addEventListener('change',()=>updPlat(true));updPlat(false);
 const copiar=async(t,ok)=>{try{await navigator.clipboard.writeText(t);say(ok)}catch{say('Não consegui copiar; selecione o texto e use Ctrl+C.')}};
 $('bCopia').onclick=()=>copiar($('desc').value,'Descrição copiada.');
 $('bCopiaT').onclick=()=>copiar($('titulo').value,'Título copiado.');
@@ -309,7 +323,7 @@ $('bDesc').onclick=async()=>{
   const b=$('bDesc');b.disabled=true;say('Gerando descrição...');
   try{
     const r=await fetch('/api/roteiro',{method:'POST',headers:{'Content-Type':'application/json','x-senha':$('senha').value},
-      body:JSON.stringify({modo:'descricao',titulo:$('titulo').value,texto,estilo:tipoServidor()})});
+      body:JSON.stringify({modo:'descricao',titulo:$('titulo').value,texto,estilo:tipoServidor(),plataforma:$('plat').value})});
     const d=await r.json();if(!r.ok)throw new Error(d.erro||r.status);
     $('desc').value=d.descricao||'';say('Descrição pronta.');
   }catch(e){say('Erro: '+e.message)}b.disabled=false;
@@ -330,7 +344,7 @@ $('bNar').onclick=async()=>{
       P[i].buf=await AC.decodeAudioData(await r.arrayBuffer());
       P[i].dur=P[i].buf.duration+GAP;
     }
-    say('Narração pronta. Veja a prévia.');$('bPrev').disabled=$('bRec').disabled=false;draw(0);
+    {const tot=Math.round(P.reduce((s,p)=>s+p.dur,0)),meta=+$('dur').value;say(`Narração pronta: o vídeo vai ter ${tot} s (meta ${meta} s).`+(tot<meta*0.85?' Está curto: gere o roteiro de novo ou edite os parágrafos (use a estimativa acima).':''))}$('bPrev').disabled=$('bRec').disabled=false;draw(0);
   }catch(e){say('Erro: '+e.message)}b.disabled=false;
 };
 
@@ -377,7 +391,7 @@ async function play(rec){
     await new Promise(r=>{mr.onstop=r;mr.stop()});
     const ext=mime.includes('mp4')?'mp4':'webm',a=document.createElement('a');
     a.href=URL.createObjectURL(new Blob(chunks,{type:mime.split(';')[0]}));
-    a.download=(($('titulo').value||'short').replace(/[^\w\-]+/g,'_').slice(0,50))+'.'+ext;a.click();say('Vídeo baixado ('+ext+').');
+    a.download=(($('titulo').value||'short').replace(/[^\w\-]+/g,'_').slice(0,50))+'.'+ext;a.click();say($('plat').value==='tiktok'&&ext!=='mp4'?'Vídeo baixado em WebM. Para o TikTok, converta para MP4 (CapCut ou HandBrake) antes de postar.':'Vídeo baixado ('+ext+').');
   }
 }
 async function run(rec){
