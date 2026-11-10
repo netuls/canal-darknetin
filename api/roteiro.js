@@ -10,13 +10,16 @@ module.exports = async (req, res) => {
   if (!process.env.GEMINI_API_KEY) return res.status(500).json({ erro: "GEMINI_API_KEY não configurada no Vercel" });
   if (process.env.APP_SENHA && req.headers["x-senha"] !== process.env.APP_SENHA) return res.status(401).json({ erro: "senha incorreta" });
 
-  const { tema = "", assunto = "", duracao = 45, tom = "misterioso", modo = "", titulo = "", texto = "", estilo = "escuro", jaUsados = [] } = req.body || {};
+  const { tema = "", assunto = "", duracao = 45, tom = "misterioso", modo = "", titulo = "", texto = "", estilo = "escuro", jaUsados = [], plataforma = "youtube" } = req.body || {};
+  const tiktok = plataforma === "tiktok";
   const infantil = estilo === "infantil";
   const emocional = estilo === "emocional";
   const pick = (dark, kids, emo) => infantil ? kids : emocional ? emo : dark;
   const usados = (Array.isArray(jaUsados) ? jaUsados : []).map(x => String(x).slice(0, 140)).filter(Boolean).slice(-200);
   const dur = Math.min(Math.max(Number(duracao) || 45, 15), 60);
-  const palavras = Math.round(dur * 2.3);
+  const palavras = Math.round(dur * 2.7); // narração em ritmo de Short: ~2,7 palavras por segundo
+  const minPal = Math.round(palavras * 0.9), maxPal = Math.round(palavras * 1.1);
+  const nPar = dur <= 30 ? "5 a 7" : dur <= 45 ? "7 a 10" : "10 a 14";
   const tipoCanal = pick("canal dark", "canal infantil (crianças pequenas e seus pais)", "canal de histórias emocionantes sobre amizade e laços de família (público geral)");
   const gancho = pick(
     "o 1º parágrafo é uma única frase curta (até ~12 palavras), agressiva e impossível de ignorar, que gera curiosidade ou choque. Proibido começar com saudação, apresentação, \"neste vídeo\", contexto ou data solta.",
@@ -44,26 +47,29 @@ ${usados.map(u => "- " + u).join("\n")}
 ` : "";
   const comentario = infantil ? "uma frase carinhosa para os pais (sem pedir comentários)" : "uma pergunta para gerar comentários";
   const hashtags = infantil ? "#shorts e #infantil" : "#shorts";
-  let prompt = `Crie o roteiro narrado de um YouTube Short (vertical) de ${tipoCanal}, em português do Brasil.
+  const descFormato = tiktok
+    ? `1 linha de gancho curta (até 100 caracteres), ${comentario} e, no fim, 4 a 6 hashtags relevantes incluindo #fyp e #paravoce (NÃO use #shorts). No total, até 250 caracteres.`
+    : `1ª linha com o gancho (aparece antes do "ver mais"), 2 a 3 frases sobre o vídeo sem entregar o final, ${comentario} e, no fim, 5 a 8 hashtags relevantes incluindo ${hashtags}.`;
+  let prompt = `Crie o roteiro narrado de um YouTube Short (vertical) de ${tipoCanal}, em português do Brasil, para publicar no ${tiktok ? "TikTok" : "YouTube Shorts"}.
 Tema do canal: ${String(tema).slice(0, 100)}
 Assunto específico: ${String(assunto).slice(0, 300) || pick("escolha um assunto pouco conhecido e intrigante dentro do tema", "escolha um assunto original, divertido e educativo dentro do tema", "escolha uma história original, inesperada e emocionante dentro do tema")}
 Tom: ${String(tom).slice(0, 50)}
-Duração: cerca de ${dur} segundos (~${palavras} palavras no total).
+Duração: ${dur} segundos de narração. A SOMA de todas as palavras dos parágrafos deve ficar entre ${minPal} e ${maxPal} palavras (alvo: ${palavras}). Um roteiro com menos de ${minPal} palavras está ERRADO, porque o vídeo ficaria curto demais.
 ${bloqueio}
 Regras de retenção (o algoritmo de Shorts testa o vídeo num grupo pequeno e mede quem NÃO desliza nos 2 primeiros segundos, quem assiste até o fim e quem reassiste; o roteiro precisa servir a isso):
 - GANCHO: ${gancho}
 - A imagem do 1º parágrafo deve ser ${img1} (precisa prender em 0,2 s).
 - RITMO: frases curtas e diretas, zero enrolação. Cada parágrafo traz uma informação nova ou ${ritmo}. Nunca repita ideias, frases ou palavras de abertura dentro do mesmo roteiro.
-- Divida em 6 a 9 parágrafos de 1 frase (no máximo 2 bem curtas). Cada parágrafo vai receber uma imagem.
+- Divida em ${nPar} parágrafos de 1 a 2 frases curtas. Cada parágrafo vai receber uma imagem.
 - FINAL: ${final} Nunca prometa no gancho algo que o vídeo não entrega.
 - CONSISTÊNCIA VISUAL: todos os prompts de imagem devem manter o mesmo estilo (paleta, iluminação, enquadramento), para o vídeo ter um padrão visual repetido.
 - "titulo": curto (até 60 caracteres), que gere curiosidade sem mentir.
 - "assunto": o assunto do roteiro resumido em até 12 palavras (usado para evitar repetições no futuro).${regrasExtra}
 - Para cada parágrafo, inclua ${regraImagem}
-- "descricao": descrição para o YouTube em português: 1ª linha com o gancho (aparece antes do "ver mais"), 2 a 3 frases sobre o vídeo sem entregar o final, ${comentario} e, no fim, 5 a 8 hashtags relevantes incluindo ${hashtags}.
+- "descricao": ${tiktok ? "legenda" : "descrição"} para o ${tiktok ? "TikTok" : "YouTube"} em português: ${descFormato}
 Responda APENAS com JSON, sem markdown: {"titulo":"...","assunto":"...","descricao":"...","paragrafos":[{"texto":"...","imagem":"..."}]}`;
   if (modo === "descricao") prompt = `Escreva a descrição de um YouTube Short em português do Brasil, a partir do título e da narração abaixo.
-Formato: 1ª linha com o gancho (aparece antes do "ver mais"), 2 a 3 frases sobre o vídeo sem entregar o final, ${infantil ? "uma frase carinhosa para os pais (sem pedir comentários)" : "uma pergunta para gerar comentários"} e, no fim, 5 a 8 hashtags relevantes incluindo #shorts${infantil ? " e #infantil" : ""}. Use só o que está na narração.
+Formato: ${descFormato} Use só o que está na narração.
 Título: ${String(titulo).slice(0, 150)}
 Narração: ${String(texto).slice(0, 3000)}
 Responda APENAS com JSON, sem markdown: {"descricao":"..."}`;
@@ -90,7 +96,13 @@ Responda APENAS com JSON, sem markdown: {"descricao":"..."}`;
         }
         const d = await r.json();
         const txt = (d.candidates?.[0]?.content?.parts || []).map(c => c.text || "").join("");
-        return res.status(200).json(JSON.parse(txt.slice(txt.indexOf("{"), txt.lastIndexOf("}") + 1)));
+        const json = JSON.parse(txt.slice(txt.indexOf("{"), txt.lastIndexOf("}") + 1));
+        const total = (json.paragrafos || []).reduce((n, p) => n + String(p.texto || "").trim().split(/\s+/).filter(Boolean).length, 0);
+        if (modo !== "descricao" && total < minPal * 0.85 && tentativa === 1) { // curto demais: pede de novo uma vez
+          prompt += `\nATENÇÃO: sua resposta anterior tinha só ${total} palavras. Reescreva com entre ${minPal} e ${maxPal} palavras no total e ${nPar} parágrafos.`;
+          continue;
+        }
+        return res.status(200).json(json);
       } catch (e) {
         console.error("Gemini", modelo, e.name, e.message);
         falhas.push(modelo + ": " + (e.name === "TimeoutError" ? "sem resposta" : "resposta inválida"));
