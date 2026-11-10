@@ -105,7 +105,6 @@ canvas{width:270px;height:480px;background:#000;border-radius:8px;border:1px sol
   <label for="desc">Texto para colar na descrição (a IA já cria junto com o roteiro)</label>
   <textarea id="desc" style="min-height:150px"></textarea>
   <div class="dica" id="platHint"></div>
-  <div class="dica">Para enviar ao YouTube: grave o vídeo na seção 5 (assim a extensão anexa o arquivo sozinha) e clique em "Enviar ao YouTube" no ícone da extensão. Ela preenche título e descrição; você confere e publica.</div>
   <div class="bar"><button class="sec" id="bDesc">Gerar descrição do roteiro atual</button><button class="sec" id="bCopia">Copiar descrição</button><button class="sec" id="bCopiaT">Copiar título</button></div>
 </section>
 
@@ -133,6 +132,28 @@ canvas{width:270px;height:480px;background:#000;border-radius:8px;border:1px sol
   </div>
 </section>
 
+<section>
+  <h2>6. Enviar ao YouTube</h2>
+  <div class="dica" style="margin:0 0 8px">Envia o vídeo da seção 5 (o último gravado) com o título e a descrição da seção 3, direto pela API do YouTube.</div>
+  <div class="row">
+    <div><label for="ytid">Client ID do Google (OAuth)</label><input id="ytid" placeholder="123456-abc.apps.googleusercontent.com"></div>
+    <div><label for="ytpriv">Visibilidade</label><select id="ytpriv"><option value="private">Privado</option><option value="unlisted">Não listado</option><option value="public">Público</option></select></div>
+    <div><label for="ytkids">É conteúdo para crianças? (declaração sua ao YouTube)</label><select id="ytkids"><option value="">Escolha...</option><option value="nao">Não é para crianças</option><option value="sim">Sim, é para crianças</option></select></div>
+    <div><label for="ytarq">Ou escolha um arquivo de vídeo</label><input id="ytarq" type="file" accept="video/*"></div>
+  </div>
+  <div class="bar"><button id="bYt">Enviar ao YouTube</button><span id="ytmsg" role="status" style="font:14px system-ui,sans-serif;color:var(--ac)"></span></div>
+  <div class="dica" style="max-width:760px">Importante: enquanto o seu projeto no Google não passar na auditoria do YouTube, todo vídeo enviado por API fica travado como privado, mesmo que você escolha público (e não dá para liberar pelo Studio). Cada envio gasta 1.600 da cota diária de 10.000 (cerca de 6 vídeos por dia).</div>
+  <details style="margin-top:10px"><summary class="dica" style="cursor:pointer">Como conseguir o Client ID (faça uma vez)</summary>
+    <ol class="dica" style="line-height:1.7">
+      <li>Em console.cloud.google.com, crie um projeto e ative a "YouTube Data API v3".</li>
+      <li>Em "Tela de permissão OAuth", escolha Externo e adicione o seu e-mail em "Usuários de teste".</li>
+      <li>Em Credenciais, crie um "ID do cliente OAuth" do tipo Aplicativo da Web. Em "Origens JavaScript autorizadas" coloque o endereço do seu site (ex.: https://seu-site.vercel.app).</li>
+      <li>Copie o Client ID e cole acima. Na primeira vez o Google avisa "app não verificado": clique em Avançado e continue.</li>
+    </ol>
+  </details>
+</section>
+
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <script>
 const $=id=>document.getElementById(id), W=1080, H=1920, GAP=0.15, FADE=0.25;
 const cv=$('cv'), g=cv.getContext('2d');g.imageSmoothingEnabled=true;g.imageSmoothingQuality='high';
@@ -265,18 +286,6 @@ window.pegarPrompts=modo=>{
   }
   return{tipo:'foto',prompts:P.map(promptDe),info:`${P.length} foto(s)`};
 };
-// Ponte usada pela extensão para o envio ao YouTube: título, descrição e o último vídeo gravado (se houver).
-window.pegarPublicacao=()=>{
-  const titulo=$('titulo').value.trim(),descricao=$('desc').value.trim();
-  if(!titulo)return{erro:'Gere o roteiro no estúdio primeiro (falta o título).'};
-  const v=window.__ultimoVideo;
-  return{titulo,descricao,plataforma:$('plat').value,video:v?{nome:v.nome,tipo:v.blob.type||'video/mp4',tamanho:v.blob.size}:null};
-};
-window.pegarVideoParte=(k,tam)=>new Promise((ok,no)=>{
-  const v=window.__ultimoVideo;if(!v)return no(new Error('sem vídeo gravado'));
-  const r=new FileReader();r.onload=()=>ok(String(r.result).split(',')[1]);r.onerror=()=>no(r.error);
-  r.readAsDataURL(v.blob.slice(k*tam,(k+1)*tam));
-});
 $('bPrompts').onclick=()=>{
   const t=P.map((p,i)=>`${i+1}. ${p.imagem||('Scene illustrating: '+p.texto.trim())}.${sufixo().slice(1)}`).join('\n');
   navigator.clipboard.writeText(t).then(()=>say('Prompts copiados. Gere as imagens no Gemini/Copilot e envie pelo botão de várias fotos.'),()=>say('Não consegui copiar.'));
@@ -404,7 +413,7 @@ async function play(rec){
     await new Promise(r=>{mr.onstop=r;mr.stop()});
     const ext=mime.includes('mp4')?'mp4':'webm',a=document.createElement('a');
     const vblob=new Blob(chunks,{type:mime.split(';')[0]}),vnome=(($('titulo').value||'short').replace(/[^\w\-]+/g,'_').slice(0,50))+'.'+ext;
-    window.__ultimoVideo={blob:vblob,nome:vnome}; // a extensão usa este vídeo no envio ao YouTube
+    window.__ultimoVideo={blob:vblob,nome:vnome}; // usado pelo envio ao YouTube (seção 6)
     a.href=URL.createObjectURL(vblob);
     a.download=vnome;a.click();say($('plat').value==='tiktok'&&ext!=='mp4'?'Vídeo baixado em WebM. Para o TikTok, converta para MP4 (CapCut ou HandBrake) antes de postar.':'Vídeo baixado ('+ext+').');
   }
@@ -415,6 +424,58 @@ async function run(rec){
   $('bPrev').disabled=$('bRec').disabled=false;
 }
 $('bPrev').onclick=()=>run(false);$('bRec').onclick=()=>run(true);
+
+// ---------- Envio ao YouTube (API v3, upload resumível direto do navegador) ----------
+['ytid','ytpriv','ytkids'].forEach(k=>{$(k).value=load('ed_'+k)||$(k).value;$(k).addEventListener('input',()=>store('ed_'+k,$(k).value))});
+let ytTok=null,ytExp=0;
+const ytSay=t=>{$('ytmsg').textContent=t};
+function ytToken(){
+  return new Promise((ok,no)=>{
+    if(ytTok&&Date.now()<ytExp)return ok(ytTok);
+    if(!window.google||!google.accounts)return no(new Error('o login do Google não carregou (internet ou bloqueador de anúncios?)'));
+    google.accounts.oauth2.initTokenClient({
+      client_id:$('ytid').value.trim(),scope:'https://www.googleapis.com/auth/youtube.upload',
+      callback:r=>{if(r.error)return no(new Error(r.error_description||r.error));ytTok=r.access_token;ytExp=Date.now()+(r.expires_in-60)*1000;ok(ytTok)},
+      error_callback:e=>no(new Error(e.type==='popup_closed'?'a janela de login foi fechada':(e.message||e.type||'login recusado')))
+    }).requestAccessToken();
+  });
+}
+function ytErro(txt,status){
+  let m='';try{const e=JSON.parse(txt).error;m=(e.errors&&e.errors[0]&&e.errors[0].reason)||e.message||''}catch{}
+  const dic={quotaExceeded:'a cota diária da API acabou (volta à meia-noite, horário do Pacífico)',youtubeSignupRequired:'esta conta Google não tem canal no YouTube',uploadLimitExceeded:'o canal atingiu o limite de envios',forbidden:'sem permissão para enviar (confira se sua conta está em "Usuários de teste")',unauthorized:'login expirado, tente de novo'};
+  return dic[m]||(m?`${m} (${status})`:`erro ${status}`);
+}
+async function ytEnviar(blob,titulo,desc,priv,kids){
+  const tok=await ytToken();
+  const tipo=blob.type||'video/mp4';
+  const r=await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status',{
+    method:'POST',headers:{Authorization:'Bearer '+tok,'Content-Type':'application/json; charset=UTF-8','X-Upload-Content-Length':String(blob.size),'X-Upload-Content-Type':tipo},
+    body:JSON.stringify({snippet:{title:titulo.slice(0,100),description:desc.slice(0,5000),categoryId:'22'},status:{privacyStatus:priv,selfDeclaredMadeForKids:kids}})});
+  if(!r.ok){ytTok=null;throw new Error(ytErro(await r.text(),r.status))}
+  const url=r.headers.get('Location');if(!url)throw new Error('o YouTube não devolveu o endereço de envio');
+  return new Promise((ok,no)=>{
+    const x=new XMLHttpRequest();x.open('PUT',url);x.setRequestHeader('Content-Type',tipo);
+    x.upload.onprogress=e=>e.lengthComputable&&ytSay(`Enviando... ${Math.round(100*e.loaded/e.total)}% (não feche esta aba)`);
+    x.onload=()=>{if(x.status>=200&&x.status<300){try{ok(JSON.parse(x.responseText))}catch{no(new Error('resposta inesperada do YouTube'))}}else no(new Error(ytErro(x.responseText,x.status)))};
+    x.onerror=()=>no(new Error('falha de rede durante o envio'));x.send(blob);
+  });
+}
+$('bYt').onclick=()=>{
+  const b=$('bYt'),titulo=$('titulo').value.trim(),desc=$('desc').value.trim(),priv=$('ytpriv').value,k=$('ytkids').value;
+  const arq=$('ytarq').files[0],v=window.__ultimoVideo,blob=arq||(v&&v.blob);
+  if(!$('ytid').value.trim())return ytSay('Cole o Client ID do Google (veja "Como conseguir o Client ID").');
+  if(!titulo)return ytSay('Falta o título (seção 2).');
+  if(!blob)return ytSay('Grave o vídeo na seção 5 ou escolha um arquivo acima.');
+  if(!k)return ytSay('Escolha se o conteúdo é para crianças.');
+  b.disabled=true;ytSay('Abrindo o login do Google...');
+  ytEnviar(blob,titulo,desc,priv,k==='sim').then(d=>{
+    const link=`https://www.youtube.com/watch?v=${d.id}`,a=document.createElement('a');
+    a.href=link;a.target='_blank';a.rel='noopener';a.textContent=link;a.style.color='var(--ac)';
+    const got=d.status&&d.status.privacyStatus;
+    $('ytmsg').textContent=got&&got!==priv?`Enviado, mas o YouTube deixou como "${got}" (projeto sem auditoria). `:'Enviado! ';
+    $('ytmsg').append(a);
+  }).catch(e=>ytSay('Erro: '+e.message)).finally(()=>{b.disabled=false});
+};
 P=[{texto:'',imagem:''}];render();
 </script>
 </body>
