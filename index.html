@@ -99,9 +99,9 @@ canvas{width:270px;height:480px;background:#000;border-radius:8px;border:1px sol
     <label for="gl" style="margin:0">Linhas</label><input id="gl" type="number" min="1" max="8" value="2" style="width:64px">
     <label for="gm" style="margin:0" title="Pixels descartados em cada borda de cada quadro, para tirar as linhas de separação">Borda</label><input id="gm" type="number" min="0" max="40" value="3" style="width:64px">
     <button class="sec" id="bLote">Enviar várias fotos de uma vez</button>
-    <input type="file" id="lote" accept="image/*" multiple hidden>
+    <input type="file" id="lote" accept="image/*,video/*" multiple hidden>
   </div>
-  <div class="dica">Cada foto fica na tela pelo tempo da fala do parágrafo. Use fotos verticais ou quadradas; o sistema corta para 9:16.</div>
+  <div class="dica">Cada foto ou vídeo fica na tela pelo tempo da fala do parágrafo (vídeo curto repete até acabar a fala; vídeo longo é cortado). Use vídeos MP4 e fotos verticais ou quadradas; o sistema corta para 9:16. No modo cena épica, o final usa só foto.</div>
 </section>
 
 <section>
@@ -188,7 +188,7 @@ function render(){
     const d=document.createElement('div');d.className='par';
     const th=document.createElement('div');th.className='th';th.tabIndex=0;th.textContent='Foto';
     if(p.url)th.style.backgroundImage=`url(${p.url})`,th.textContent='';
-    const f=document.createElement('input');f.type='file';f.accept='image/*';f.hidden=true;
+    const f=document.createElement('input');f.type='file';f.accept='image/*,video/*';f.hidden=true;
     f.onchange=()=>setImg(i,f.files[0]);th.onclick=()=>f.click();th.onkeydown=e=>{if(e.key==='Enter')f.click()};
     const r=document.createElement('div');
     const ta=document.createElement('textarea');ta.value=p.texto;ta.oninput=()=>{p.texto=ta.value;p.buf=null;estim()};
@@ -221,8 +221,19 @@ function nitidez(im){
   }catch{return im}
 }
 function setImg(i,file){
-  return new Promise(ok=>{if(!file)return ok();const url=URL.createObjectURL(file);const im=new Image();
-  im.onload=()=>{P[i].orig={w:im.naturalWidth,h:im.naturalHeight};P[i].img=nitidez(im);P[i].url=url;render();ok()};im.src=url});
+  return new Promise(ok=>{if(!file)return ok();
+    if((file.type||'').startsWith('video/')){
+      if(P[i].final){say('O final usa foto. Coloque vídeos só nos parágrafos da narração.');return ok()}
+      const v=document.createElement('video');v.muted=true;v.loop=true;v.playsInline=true;v.preload='auto';v.src=URL.createObjectURL(file);
+      v.onloadeddata=()=>{ // miniatura = 1º quadro
+        const c=document.createElement('canvas');c.width=180;c.height=320;const x=c.getContext('2d'),k=Math.max(180/v.videoWidth,320/v.videoHeight);
+        x.drawImage(v,(180-v.videoWidth*k)/2,(320-v.videoHeight*k)/2,v.videoWidth*k,v.videoHeight*k);
+        P[i].vid=true;P[i].orig=null;P[i].img=v;P[i].url=c.toDataURL('image/jpeg',.7);render();ok()};
+      v.onerror=()=>{say('Não consegui ler esse vídeo (prefira MP4).');ok()};
+      return;
+    }
+    const url=URL.createObjectURL(file);const im=new Image();
+    im.onload=()=>{P[i].vid=false;P[i].orig={w:im.naturalWidth,h:im.naturalHeight};P[i].img=nitidez(im);P[i].url=url;render();ok()};im.src=url});
 }
 async function genImg(i){
   const p=P[i];if(!p.texto.trim()&&!p.imagem)throw new Error('Parágrafo vazio.');
@@ -300,7 +311,7 @@ $('bPrompts').onclick=()=>{
 };
 $('bImgs').onclick=async()=>{
   const b=$('bImgs');b.disabled=true;let n=0;
-  try{for(let i=0;i<P.length;i++){if(P[i].img)continue;await genImg(i);n++;await new Promise(r=>setTimeout(r,1500))}say(n?`${n} foto(s) geradas.`:'Todos os parágrafos já têm foto.')}
+  try{const cena=$('modo').value==='cena';for(let i=0;i<P.length;i++){if(P[i].img||(cena&&!P[i].final))continue;await genImg(i);n++;await new Promise(r=>setTimeout(r,1500))}say(n?`${n} foto(s) geradas.`:'Todos os parágrafos já têm foto.')}
   catch(e){say('Erro: '+e.message+' (as fotos já geradas foram mantidas; clique de novo para continuar)')}
   b.disabled=false;
 };
@@ -387,14 +398,22 @@ $('bNar').onclick=async()=>{
 
 function wrap(t,max){const w=t.split(' ');const ls=[];let l='';for(const x of w){const n=l?l+' '+x:x;if(g.measureText(n).width>max&&l){ls.push(l);l=x}else l=n}if(l)ls.push(l);return ls}
 function cover(im,s,ox,oy,a){
-  const k=Math.max(W/im.width,H/im.height)*s,w=im.width*k,h=im.height*k;
+  const iw=im.videoWidth||im.width,ih=im.videoHeight||im.height,k=Math.max(W/iw,H/ih)*s,w=iw*k,h=ih*k;
   g.globalAlpha=a;g.drawImage(im,(W-w)/2+ox,(H-h)/2+oy,w,h);g.globalAlpha=1;
 }
 function frame(i,lt,a){ // zoom lento, alterna entre aproximar e afastar
-  const p=P[i];if(!p.img)return;const u=Math.min(lt/p.dur,1),z=i%2?1.14-0.12*u:1.02+0.12*u;
+  const p=P[i];if(!p.img)return;if(p.vid){cover(p.img,1,0,0,a);return}const u=Math.min(lt/p.dur,1),z=i%2?1.14-0.12*u:1.02+0.12*u;
   cover(p.img,z,(i%3-1)*30*(u-.5),0,a);
 }
 // Final com música: cortes secos entre visões diferentes (aproxima, afasta, desliza), com um clarão rápido em cada corte.
+let tocando=false,vidAtual=null;
+const paraVideos=()=>{P.forEach(p=>{if(p.vid)try{p.img.pause()}catch{}});vidAtual=null;tocando=false};
+function ctrlVideo(i){ // inicia o vídeo do parágrafo atual e pausa o anterior
+  const v=P[i].vid?P[i].img:null;
+  if(v===vidAtual)return;
+  if(vidAtual)vidAtual.pause();
+  vidAtual=v;if(v){v.currentTime=0;v.play().catch(()=>{})}
+}
 const PAUSA=0.45; // silêncio dramático antes da música entrar
 function ajustaFinais(){
   const c=Math.max(0.5,+$('corte').value||1.4),fi=P.findIndex(p=>p.final);
@@ -411,6 +430,7 @@ function draw(t){
   g.fillStyle='#000';g.fillRect(0,0,W,H);
   let st=0,i=0;for(;i<P.length-1;i++){if(t<st+P[i].dur)break;st+=P[i].dur}
   const lt=t-st;
+  if(tocando)ctrlVideo(i);
   if(P[i].final){frameFinal(i,lt);return} // final: sem legenda
   if(i>0&&lt<FADE){frame(i-1,P[i-1].dur,1);frame(i,lt,lt/FADE)}else frame(i,lt,1);
   const gr=g.createLinearGradient(0,H*.55,0,H);gr.addColorStop(0,'rgba(0,0,0,0)');gr.addColorStop(1,'rgba(0,0,0,.75)');g.fillStyle=gr;g.fillRect(0,H*.55,W,H*.45);
@@ -443,8 +463,10 @@ async function play(rec){
     const st=cv.captureStream(30);dest.stream.getAudioTracks().forEach(tr=>st.addTrack(tr));
     mr=new MediaRecorder(st,{mimeType:mime,videoBitsPerSecond:8e6});mr.ondataavailable=e=>e.data.size&&chunks.push(e.data);mr.start(1000);
   }
+  tocando=true;
   await new Promise(res=>{(function loop(){const t=AC.currentTime-t0;
     if(t>=T){return res()}draw(Math.max(t,0));if(rec)say(`Gravando... ${Math.round(t)}s de ${Math.round(T)}s`);requestAnimationFrame(loop)})()});
+  paraVideos();
   if(rec){
     await new Promise(r=>{mr.onstop=r;mr.stop()});
     const ext=mime.includes('mp4')?'mp4':'webm',a=document.createElement('a');
@@ -458,7 +480,7 @@ async function run(rec){
   if(P.some(p=>!p.img))return say('Falta foto em algum parágrafo.');
   if(P.some(p=>p.final)&&!$('mus').files[0])return say('Escolha a música do final na seção 4 (campo Música).');
   ajustaFinais();
-  $('bPrev').disabled=$('bRec').disabled=true;try{await play(rec)}catch(e){say('Erro: '+e.message)}
+  $('bPrev').disabled=$('bRec').disabled=true;try{await play(rec)}catch(e){paraVideos();say('Erro: '+e.message)}
   $('bPrev').disabled=$('bRec').disabled=false;
 }
 $('bPrev').onclick=()=>run(false);$('bRec').onclick=()=>run(true);
