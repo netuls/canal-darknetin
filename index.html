@@ -89,6 +89,7 @@ canvas{width:270px;height:480px;background:#000;border-radius:8px;border:1px sol
   <div class="bar">
     <button class="sec" id="bAdd">+ Parágrafo</button>
     <button class="sec" id="bAddF">+ Cena do final</button>
+    <button id="bVids">Buscar vídeos grátis (todos)</button>
     <button id="bImgs">Gerar todas as fotos com IA</button>
     <button class="sec" id="bGuia">Modo guiado (Gemini)</button>
     <button class="sec" id="bPGrade">Copiar prompt da grade</button>
@@ -198,11 +199,13 @@ function render(){
     if(p.orig&&p.orig.w<1000){const w=document.createElement('div');w.className='dica';w.style.color='#e07a5f';w.textContent=`⚠ Foto pequena (${p.orig.w}x${p.orig.h}px): ampliei e afiei automaticamente, mas ainda fica mais suave que uma foto de 1080 px ou mais.`;r.append(w)}
     const del=document.createElement('button');del.className='sec';del.textContent='Remover';del.style.marginTop='6px';
     del.onclick=()=>{P.splice(i,1);render()};
+    const bv=document.createElement('button');bv.className='sec';bv.textContent=p.vid?'Outro vídeo grátis':'Buscar vídeo grátis';bv.style.cssText='margin:6px 8px 0 0';
+    bv.onclick=async()=>{bv.disabled=true;try{await buscarVideo(i)}catch(e){say('Erro: '+e.message)}bv.disabled=false};
     const gi=document.createElement('button');gi.className='sec';gi.textContent='Gerar foto com IA';gi.style.cssText='margin:6px 8px 0 0';
     gi.onclick=async()=>{gi.disabled=true;try{await genImg(i)}catch(e){say('Erro: '+e.message)}gi.disabled=false};
     const cp=document.createElement('button');cp.className='sec';cp.textContent='Copiar prompt';cp.style.cssText='margin:6px 8px 0 0';
     cp.onclick=()=>navigator.clipboard.writeText((p.imagem||('Scene illustrating: '+p.texto.trim()))+sufixo()).then(()=>say(`Prompt ${i+1} copiado.`),()=>say('Não consegui copiar.'));
-    r.append(p.final?tag:ta,hint,gi,cp,del);d.append(th,r,f);L.append(d);
+    r.append(p.final?tag:ta,hint);if(!p.final)r.append(bv);r.append(gi,cp,del);d.append(th,r,f);L.append(d);
   });
   estim();
 }
@@ -228,13 +231,33 @@ function setImg(i,file){
       v.onloadeddata=()=>{ // miniatura = 1º quadro
         const c=document.createElement('canvas');c.width=180;c.height=320;const x=c.getContext('2d'),k=Math.max(180/v.videoWidth,320/v.videoHeight);
         x.drawImage(v,(180-v.videoWidth*k)/2,(320-v.videoHeight*k)/2,v.videoWidth*k,v.videoHeight*k);
-        P[i].vid=true;P[i].orig=null;P[i].img=v;P[i].url=c.toDataURL('image/jpeg',.7);render();ok()};
+        P[i].vid=true;P[i].vidId=null;P[i].orig=null;P[i].img=v;P[i].url=c.toDataURL('image/jpeg',.7);render();ok()};
       v.onerror=()=>{say('Não consegui ler esse vídeo (prefira MP4).');ok()};
       return;
     }
     const url=URL.createObjectURL(file);const im=new Image();
-    im.onload=()=>{P[i].vid=false;P[i].orig={w:im.naturalWidth,h:im.naturalHeight};P[i].img=nitidez(im);P[i].url=url;render();ok()};im.src=url});
+    im.onload=()=>{P[i].vid=false;P[i].vidId=null;P[i].orig={w:im.naturalWidth,h:im.naturalHeight};P[i].img=nitidez(im);P[i].url=url;render();ok()};im.src=url});
 }
+// Busca um clipe vertical grátis (Pexels) para o parágrafo i e coloca como vídeo dele.
+async function buscarVideo(i){
+  const p=P[i];if(p.final)throw new Error('O final usa foto.');
+  const q=(p.busca||(p.imagem||p.texto||'').split(/\s+/).slice(0,4).join(' ')).trim();
+  if(!q)throw new Error('Esse parágrafo está vazio.');
+  say(`Buscando vídeo ${i+1} de ${P.length} ("${q}")...`);
+  const r=await fetch('/api/video',{method:'POST',headers:{'Content-Type':'application/json','x-senha':$('senha').value},
+    body:JSON.stringify({busca:q,pular:P.map(x=>x.vidId).filter(Boolean)})});
+  if(!r.ok){const d=await r.json().catch(()=>({}));throw new Error(d.erro||r.status)}
+  const id=r.headers.get('x-video-id');
+  await setImg(i,new File([await r.blob()],'clipe.mp4',{type:'video/mp4'}));
+  if(P[i].vid)P[i].vidId=id;say(`Vídeo ${i+1} pronto.`);
+}
+$('bVids').onclick=async()=>{
+  const b=$('bVids');b.disabled=true;let n=0;
+  try{for(let i=0;i<P.length;i++){if(P[i].final||P[i].img)continue;await buscarVideo(i);n++;await new Promise(r=>setTimeout(r,400))}
+    say(n?`${n} vídeo(s) encontrados. Troque qualquer um com "Outro vídeo grátis".`:'Todos os parágrafos já têm foto ou vídeo.')}
+  catch(e){say('Erro: '+e.message+' (os já encontrados foram mantidos; clique de novo para continuar)')}
+  b.disabled=false;
+};
 async function genImg(i){
   const p=P[i];if(!p.texto.trim()&&!p.imagem)throw new Error('Parágrafo vazio.');
   say(`Gerando foto ${i+1} de ${P.length}...`);
@@ -354,7 +377,7 @@ $('bGerar').onclick=async()=>{
     }
     if(!d)throw new Error('a IA insistiu em repetir assuntos já feitos. Mude o tema ou escreva um assunto específico novo.');
     $('titulo').value=d.titulo||'';$('desc').value=d.descricao||'';
-    P=d.paragrafos.map(p=>({texto:p.texto,imagem:p.imagem}));if(cena)P=P.concat((d.final||[]).map(f=>({texto:'',imagem:f.imagem,final:true})));
+    P=d.paragrafos.map(p=>({texto:p.texto,imagem:p.imagem,busca:p.busca}));if(cena)P=P.concat((d.final||[]).map(f=>({texto:'',imagem:f.imagem,final:true})));
     $('hist').value=lerHist().concat(`${d.titulo||''} — ${d.assunto||''}`).join('\n');store('ed_hist',$('hist').value);
     render();say(cena?`Roteiro pronto: narração + ${P.filter(p=>p.final).length} cenas de final. Coloque as fotos e escolha a música na seção 4.`:'Roteiro pronto (novo, sem repetir). Edite se quiser e coloque as fotos.');
   }catch(e){say(e.name==='AbortError'?'Erro: demorou demais, tente de novo':'Erro: '+e.message)}clearInterval(tk);clearTimeout(to);b.disabled=false;
