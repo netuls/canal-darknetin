@@ -70,6 +70,9 @@ canvas{width:270px;height:480px;background:#000;border-radius:8px;border:1px sol
       <select id="estilo"><option value="auto">Automático (pelo tema)</option><option value="dark">Sombrio e realista</option><option value="anim3d">Animação 3D colorida</option><option value="desenho">Desenho / ilustração infantil</option><option value="emocao">Ilustração emotiva (luz dourada)</option></select></div>
     <div><label for="dur">Duração (segundos)</label>
       <select id="dur"><option>30</option><option selected>45</option><option>60</option></select></div>
+    <div><label for="modo">Tipo de vídeo</label>
+      <select id="modo"><option value="">Normal (roteiro + fotos)</option><option value="cena">Cena épica de série/filme + final com música</option></select></div>
+    <div id="cenaBox" hidden><label for="ncenas">Cenas no final com música</label><input id="ncenas" type="number" min="4" max="12" value="7"></div>
   </div>
   <label for="assunto">Assunto específico (opcional; vazio = a IA escolhe)</label>
   <input id="assunto" placeholder="Ex.: o desaparecimento do voo 19">
@@ -85,6 +88,7 @@ canvas{width:270px;height:480px;background:#000;border-radius:8px;border:1px sol
   <div id="lista"></div>
   <div class="bar">
     <button class="sec" id="bAdd">+ Parágrafo</button>
+    <button class="sec" id="bAddF">+ Cena do final</button>
     <button id="bImgs">Gerar todas as fotos com IA</button>
     <button class="sec" id="bGuia">Modo guiado (Gemini)</button>
     <button class="sec" id="bPGrade">Copiar prompt da grade</button>
@@ -116,7 +120,9 @@ canvas{width:270px;height:480px;background:#000;border-radius:8px;border:1px sol
     <div><label for="leg">Legenda</label><select id="leg"><option value="1">Ligada</option><option value="0">Desligada</option></select></div>
     <div><label for="plat">Plataforma</label><select id="plat"><option value="youtube">YouTube Shorts</option><option value="tiktok">TikTok</option></select></div>
     <div><label for="legpos">Posição da legenda</label><select id="legpos"><option value="0.5">Centro</option><option value="0.58">Acima da legenda do TikTok</option><option value="0.66" selected>Acima da descrição (recomendado)</option><option value="0.8">Baixo</option></select></div>
-    <div><label for="mus">Música de fundo (opcional)</label><input id="mus" type="file" accept="audio/*"></div>
+    <div><label for="mus">Música (fundo baixo; no modo cena épica toca só no final)</label><input id="mus" type="file" accept="audio/*"></div>
+    <div><label for="musini">Início da música (s): ponto onde ela "explode"</label><input id="musini" type="number" min="0" step="0.5" value="0"></div>
+    <div><label for="corte">Tempo de cada cena do final (s)</label><input id="corte" type="number" min="0.5" max="4" step="0.1" value="1.4"></div>
   </div>
   <div class="bar"><button id="bNar">Gerar narração</button><span id="msg" role="status"></span></div>
 </section>
@@ -159,11 +165,11 @@ const $=id=>document.getElementById(id), W=1080, H=1920, GAP=0.15, FADE=0.25;
 const cv=$('cv'), g=cv.getContext('2d');g.imageSmoothingEnabled=true;g.imageSmoothingQuality='high';
 let P=[]; // {texto,imagem,img,buf,dur}
 const store=(k,v)=>{try{localStorage.setItem(k,v)}catch{}}, load=k=>{try{return localStorage.getItem(k)||''}catch{return ''}};
-['senha','voz','vel','plat','legpos','estilo','tema','tom','hist'].forEach(k=>{$(k).value=load('ed_'+k)||$(k).value;$(k).addEventListener('input',()=>{store('ed_'+k,$(k).value);if(k==='vel')estim()})});
+['senha','voz','vel','plat','legpos','estilo','tema','tom','hist','modo','ncenas','musini','corte'].forEach(k=>{$(k).value=load('ed_'+k)||$(k).value;$(k).addEventListener('input',()=>{store('ed_'+k,$(k).value);if(k==='vel')estim()})});
 const ESTILOS={dark:'Cinematic, dark and moody, realistic photography',anim3d:'3D animated cartoon style, bright vibrant colors, soft lighting, cute friendly original characters, family-friendly',desenho:"colorful 2D children's book illustration, flat vibrant colors, friendly original characters, family-friendly",emocao:'warm emotional storybook illustration, soft golden light, cinematic composition, painterly, tender atmosphere, original characters, family-friendly'};
 let estiloSorteado=null;
 const tipoServidor=()=>({dark:'escuro',emocao:'emocional'}[estiloAtual()]||'infantil');
-const estiloAtual=()=>{const v=$('estilo').value;if(v!=='auto')return v;const o=$('tema').selectedOptions[0];if(o&&o.dataset.surpresa)return estiloSorteado||'dark';return(o&&o.dataset.estilo)||'dark'};
+const estiloAtual=()=>{const v=$('estilo').value;if(v!=='auto')return v;if($('modo').value==='cena')return'dark';const o=$('tema').selectedOptions[0];if(o&&o.dataset.surpresa)return estiloSorteado||'dark';return(o&&o.dataset.estilo)||'dark'};
 const sufixo=()=>'. '+ESTILOS[estiloAtual()]+', vertical 9:16, no text, no watermark.';
 const updPlat=mudou=>{
   const tk=$('plat').value==='tiktok';
@@ -186,6 +192,8 @@ function render(){
     f.onchange=()=>setImg(i,f.files[0]);th.onclick=()=>f.click();th.onkeydown=e=>{if(e.key==='Enter')f.click()};
     const r=document.createElement('div');
     const ta=document.createElement('textarea');ta.value=p.texto;ta.oninput=()=>{p.texto=ta.value;p.buf=null;estim()};
+    const tag=document.createElement('div');tag.className='dica';tag.style.cssText='color:var(--ac);font-size:13px';tag.textContent='🎵 Cena do final com música (sem narração e sem legenda)';
+    if(p.final)d.style.cssText='border-left:3px solid var(--ac);padding-left:10px';
     const hint=document.createElement('div');hint.className='dica';hint.textContent=p.imagem?'Prompt da imagem: '+p.imagem:'';
     if(p.orig&&p.orig.w<1000){const w=document.createElement('div');w.className='dica';w.style.color='#e07a5f';w.textContent=`⚠ Foto pequena (${p.orig.w}x${p.orig.h}px): ampliei e afiei automaticamente, mas ainda fica mais suave que uma foto de 1080 px ou mais.`;r.append(w)}
     const del=document.createElement('button');del.className='sec';del.textContent='Remover';del.style.marginTop='6px';
@@ -194,7 +202,7 @@ function render(){
     gi.onclick=async()=>{gi.disabled=true;try{await genImg(i)}catch(e){say('Erro: '+e.message)}gi.disabled=false};
     const cp=document.createElement('button');cp.className='sec';cp.textContent='Copiar prompt';cp.style.cssText='margin:6px 8px 0 0';
     cp.onclick=()=>navigator.clipboard.writeText((p.imagem||('Scene illustrating: '+p.texto.trim()))+sufixo()).then(()=>say(`Prompt ${i+1} copiado.`),()=>say('Não consegui copiar.'));
-    r.append(ta,hint,gi,cp,del);d.append(th,r,f);L.append(d);
+    r.append(p.final?tag:ta,hint,gi,cp,del);d.append(th,r,f);L.append(d);
   });
   estim();
 }
@@ -296,7 +304,11 @@ $('bImgs').onclick=async()=>{
   catch(e){say('Erro: '+e.message+' (as fotos já geradas foram mantidas; clique de novo para continuar)')}
   b.disabled=false;
 };
-$('bAdd').onclick=()=>{P.push({texto:'',imagem:''});render()};
+$('bAdd').onclick=()=>{const f=P.findIndex(p=>p.final);P.splice(f<0?P.length:f,0,{texto:'',imagem:''});render()};
+$('bAddF').onclick=()=>{P.push({texto:'',imagem:'',final:true});render()};
+const updModo=()=>{const c=$('modo').value==='cena';$('cenaBox').hidden=!c;
+  $('assunto').placeholder=c?'Ex.: La Casa de Papel, Mentalista, Breaking Bad (a IA escolhe a cena mais marcante)':'Ex.: o desaparecimento do voo 19'};
+$('modo').addEventListener('change',updModo);updModo();
 $('bLote').onclick=()=>$('lote').click();
 $('lote').onchange=e=>{
   const fs=[...e.target.files].sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true}));
@@ -312,8 +324,10 @@ $('bGerar').onclick=async()=>{
   const ab=new AbortController(),to=setTimeout(()=>ab.abort(),170000);
   try{
     let tema=$('tema').value;if(tema.startsWith('Outro'))tema=$('assunto').value||'curiosidades';
+    const cena=$('modo').value==='cena',nc=Math.min(Math.max(+$('ncenas').value||7,4),12),corte=Math.max(0.5,+$('corte').value||1.4);
+    if(cena)tema='Cenas épicas de séries e filmes';
     const op=$('tema').selectedOptions[0];estiloSorteado=null;
-    if(op&&op.dataset.surpresa){
+    if(op&&op.dataset.surpresa&&!cena){
       const ops=[...$('tema').options].filter(o=>!o.dataset.surpresa&&!o.text.startsWith('Outro'));
       const sorte=ops[Math.floor(Math.random()*ops.length)];tema=sorte.text;estiloSorteado=sorte.dataset.estilo;
       say('Tema sorteado: '+tema+'...');
@@ -321,7 +335,7 @@ $('bGerar').onclick=async()=>{
     const extra=[];let d=null;
     for(let t=0;t<3&&!d;t++){
       const r=await fetch('/api/roteiro',{method:'POST',signal:ab.signal,headers:{'Content-Type':'application/json','x-senha':$('senha').value},
-        body:JSON.stringify({tema,assunto:$('assunto').value,duracao:+$('dur').value,tom:$('tom').value,estilo:tipoServidor(),plataforma:$('plat').value,jaUsados:[...lerHist(),...extra].slice(-200)})});
+        body:JSON.stringify({tema,assunto:$('assunto').value,duracao:cena?Math.max(15,Math.round(+$('dur').value-nc*corte)):+$('dur').value,modo:cena?'cena':'',cenas:nc,tom:$('tom').value,estilo:tipoServidor(),plataforma:$('plat').value,jaUsados:[...lerHist(),...extra].slice(-200)})});
       const x=await r.json();if(!r.ok)throw new Error(x.erro||r.status);
       const chave=`${x.titulo||''} ${x.assunto||''}`;
       if(!lerHist().some(h=>parecido(h,chave)))d=x;
@@ -329,9 +343,9 @@ $('bGerar').onclick=async()=>{
     }
     if(!d)throw new Error('a IA insistiu em repetir assuntos já feitos. Mude o tema ou escreva um assunto específico novo.');
     $('titulo').value=d.titulo||'';$('desc').value=d.descricao||'';
-    P=d.paragrafos.map(p=>({texto:p.texto,imagem:p.imagem}));
+    P=d.paragrafos.map(p=>({texto:p.texto,imagem:p.imagem}));if(cena)P=P.concat((d.final||[]).map(f=>({texto:'',imagem:f.imagem,final:true})));
     $('hist').value=lerHist().concat(`${d.titulo||''} — ${d.assunto||''}`).join('\n');store('ed_hist',$('hist').value);
-    render();say('Roteiro pronto (novo, sem repetir). Edite se quiser e coloque as fotos.');
+    render();say(cena?`Roteiro pronto: narração + ${P.filter(p=>p.final).length} cenas de final. Coloque as fotos e escolha a música na seção 4.`:'Roteiro pronto (novo, sem repetir). Edite se quiser e coloque as fotos.');
   }catch(e){say(e.name==='AbortError'?'Erro: demorou demais, tente de novo':'Erro: '+e.message)}clearInterval(tk);clearTimeout(to);b.disabled=false;
 };
 
@@ -354,18 +368,19 @@ $('bDesc').onclick=async()=>{
 let AC;
 $('bNar').onclick=async()=>{
   const b=$('bNar');
-  if(!P.length||P.some(p=>!p.texto.trim()))return say('Preencha todos os parágrafos.');
+  if(!P.length||P.some(p=>!p.final&&!p.texto.trim()))return say('Preencha todos os parágrafos.');
   if(!/^[a-f0-9]{32}$/.test($('voz').value.trim()))return say('Cole o ID da voz (32 caracteres).');
   b.disabled=true;AC=AC||new AudioContext();
   try{
     for(let i=0;i<P.length;i++){
-      if(P[i].buf)continue;say(`Narrando ${i+1} de ${P.length}...`);
+      if(P[i].final||P[i].buf)continue;say(`Narrando ${i+1} de ${P.length}...`);
       const r=await fetch('/api/narrar',{method:'POST',headers:{'Content-Type':'application/json','x-senha':$('senha').value},
         body:JSON.stringify({texto:P[i].texto.trim(),voz:$('voz').value.trim(),velocidade:+$('vel').value})});
       if(!r.ok){const d=await r.json().catch(()=>({}));throw new Error(d.erro||r.status)}
       P[i].buf=await AC.decodeAudioData(await r.arrayBuffer());
       P[i].dur=P[i].buf.duration+GAP;
     }
+    ajustaFinais();
     {const tot=Math.round(P.reduce((s,p)=>s+p.dur,0)),meta=+$('dur').value;say(`Narração pronta: o vídeo vai ter ${tot} s (meta ${meta} s).`+(tot<meta*0.85?' Está curto: gere o roteiro de novo ou edite os parágrafos (use a estimativa acima).':''))}$('bPrev').disabled=$('bRec').disabled=false;draw(0);
   }catch(e){say('Erro: '+e.message)}b.disabled=false;
 };
@@ -379,10 +394,24 @@ function frame(i,lt,a){ // zoom lento, alterna entre aproximar e afastar
   const p=P[i];if(!p.img)return;const u=Math.min(lt/p.dur,1),z=i%2?1.14-0.12*u:1.02+0.12*u;
   cover(p.img,z,(i%3-1)*30*(u-.5),0,a);
 }
+// Final com música: cortes secos entre visões diferentes (aproxima, afasta, desliza), com um clarão rápido em cada corte.
+const PAUSA=0.45; // silêncio dramático antes da música entrar
+function ajustaFinais(){
+  const c=Math.max(0.5,+$('corte').value||1.4),fi=P.findIndex(p=>p.final);
+  P.forEach((p,i)=>{if(p.final)p.dur=c;else if(p.buf)p.dur=p.buf.duration+GAP+((fi>0&&i===fi-1)?PAUSA:0)});
+}
+function frameFinal(i,lt){
+  const p=P[i];if(!p.img)return;
+  const k=P.slice(0,i).filter(x=>x.final).length%4,u=Math.min(lt/p.dur,1);let z,ox=0;
+  if(k===0)z=1.02+0.22*u;else if(k===1)z=1.24-0.22*u;else if(k===2){z=1.18;ox=-70+140*u}else{z=1.18;ox=70-140*u}
+  cover(p.img,z,ox,0,1);
+  const fl=Math.max(0,1-lt/0.12)*0.55;if(fl>0){g.fillStyle='rgba(255,255,255,'+fl+')';g.fillRect(0,0,W,H)}
+}
 function draw(t){
   g.fillStyle='#000';g.fillRect(0,0,W,H);
   let st=0,i=0;for(;i<P.length-1;i++){if(t<st+P[i].dur)break;st+=P[i].dur}
   const lt=t-st;
+  if(P[i].final){frameFinal(i,lt);return} // final: sem legenda
   if(i>0&&lt<FADE){frame(i-1,P[i-1].dur,1);frame(i,lt,lt/FADE)}else frame(i,lt,1);
   const gr=g.createLinearGradient(0,H*.55,0,H);gr.addColorStop(0,'rgba(0,0,0,0)');gr.addColorStop(1,'rgba(0,0,0,.75)');g.fillStyle=gr;g.fillRect(0,H*.55,W,H*.45);
   if($('leg').value==='1'){
@@ -398,9 +427,16 @@ async function play(rec){
   if($('mus').files[0])musBuf=await AC.decodeAudioData(await $('mus').files[0].arrayBuffer());else musBuf=null;
   const dest=AC.createMediaStreamDestination(),T=total(),t0=AC.currentTime+0.3;
   const out=rec?dest:AC.destination;
-  let s=0;P.forEach(p=>{const n=AC.createBufferSource();n.buffer=p.buf;n.connect(out);if(rec)n.connect(AC.destination);n.start(t0+s);s+=p.dur});
-  if(musBuf){const n=AC.createBufferSource(),gn=AC.createGain();n.buffer=musBuf;n.loop=true;gn.gain.value=.12;
-    n.connect(gn);gn.connect(out);if(rec)gn.connect(AC.destination);n.start(t0);n.stop(t0+T+.3)}
+  let s=0;P.forEach(p=>{if(p.buf){const n=AC.createBufferSource();n.buffer=p.buf;n.connect(out);if(rec)n.connect(AC.destination);n.start(t0+s)}s+=p.dur});
+  if(musBuf){const n=AC.createBufferSource(),gn=AC.createGain();n.buffer=musBuf;n.loop=true;
+    n.connect(gn);gn.connect(out);if(rec)gn.connect(AC.destination);
+    const fi=P.findIndex(p=>p.final);
+    if(fi>=0){ // música entra no começo do final, com fade-out no fim
+      const ts=t0+P.slice(0,fi).reduce((a,p)=>a+p.dur,0),te=t0+T,ini=Math.min(Math.max(+$('musini').value||0,0),Math.max(musBuf.duration-1,0));
+      gn.gain.setValueAtTime(0,ts);gn.gain.linearRampToValueAtTime(.85,ts+.08);gn.gain.setValueAtTime(.85,Math.max(ts+.1,te-1.2));gn.gain.linearRampToValueAtTime(0,te+.2);
+      n.start(ts,ini);n.stop(te+.3);
+    }else{gn.gain.value=.12;n.start(t0);n.stop(t0+T+.3)}
+  }
   let mr,chunks=[],mime='';
   if(rec){
     mime=['video/mp4;codecs=avc1,mp4a.40.2','video/mp4','video/webm;codecs=vp9,opus','video/webm'].find(m=>MediaRecorder.isTypeSupported(m));
@@ -420,6 +456,8 @@ async function play(rec){
 }
 async function run(rec){
   if(P.some(p=>!p.img))return say('Falta foto em algum parágrafo.');
+  if(P.some(p=>p.final)&&!$('mus').files[0])return say('Escolha a música do final na seção 4 (campo Música).');
+  ajustaFinais();
   $('bPrev').disabled=$('bRec').disabled=true;try{await play(rec)}catch(e){say('Erro: '+e.message)}
   $('bPrev').disabled=$('bRec').disabled=false;
 }
