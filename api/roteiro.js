@@ -10,7 +10,7 @@ module.exports = async (req, res) => {
   if (!process.env.GEMINI_API_KEY) return res.status(500).json({ erro: "GEMINI_API_KEY não configurada no Vercel" });
   if (process.env.APP_SENHA && req.headers["x-senha"] !== process.env.APP_SENHA) return res.status(401).json({ erro: "senha incorreta" });
 
-  const { tema = "", assunto = "", duracao = 45, tom = "misterioso", modo = "", titulo = "", texto = "", estilo = "escuro", jaUsados = [], plataforma = "youtube" } = req.body || {};
+  const { tema = "", assunto = "", duracao = 45, tom = "misterioso", modo = "", titulo = "", texto = "", estilo = "escuro", jaUsados = [], plataforma = "youtube", cenas = 7 } = req.body || {};
   const tiktok = plataforma === "tiktok";
   const infantil = estilo === "infantil";
   const emocional = estilo === "emocional";
@@ -74,12 +74,34 @@ Título: ${String(titulo).slice(0, 150)}
 Narração: ${String(texto).slice(0, 3000)}
 Responda APENAS com JSON, sem markdown: {"descricao":"..."}`;
 
+  // Modo "cena épica": narra uma cena marcante de série/filme e termina com uma montagem de cenas (sem narração, com música)
+  const cena = modo === "cena";
+  const nCenas = Math.min(Math.max(Number(cenas) || 7, 4), 12);
+  if (cena) prompt = `Crie o roteiro narrado de um YouTube Short (vertical) de um canal que conta, em narração, as cenas mais marcantes de séries e filmes, em português do Brasil, para publicar no ${tiktok ? "TikTok" : "YouTube Shorts"}.
+Série ou filme: ${String(assunto).slice(0, 300) || "escolha uma série ou filme muito famoso"}
+(Se vierem várias obras, escolha só UMA. Se vier também uma cena, personagem ou temporada, use isso.)
+Tom: ${String(tom).slice(0, 50)}
+Duração da narração: ${dur} segundos. A SOMA de todas as palavras dos parágrafos deve ficar entre ${minPal} e ${maxPal} palavras (alvo: ${palavras}). Menos de ${minPal} palavras está ERRADO.
+${bloqueio}
+Como montar:
+- Escolha UMA cena que realmente existe nessa obra e que arrepia: uma virada, revelação, plano genial, discurso, confronto ou sacrifício que todo fã lembra. Descreva só o que você tem certeza que acontece; se não lembrar bem de uma cena, escolha outra que lembre bem. NUNCA invente cenas, falas ou personagens.
+- Conte com as suas próprias palavras. Não reproduza diálogos longos nem trechos de roteiro (direitos autorais); no máximo uma fala curtíssima e famosa.
+- GANCHO: o 1º parágrafo é uma única frase curta (até ~12 palavras), agressiva e impossível de ignorar. Proibido começar com saudação, apresentação ou "neste vídeo".
+- Frases curtas e diretas. Contexto mínimo, depois o que está em jogo e a situação apertando, aumentando a tensão a cada parágrafo. Divida em ${nPar} parágrafos de 1 a 2 frases curtas; cada um recebe uma imagem.
+- O ÚLTIMO parágrafo narra o momento-clímax (a parte mais foda da cena) e termina numa frase curta e de impacto. Não explique o que vem depois: em seguida entra uma música com uma montagem final, sem narração.
+- "final": exatamente ${nCenas} itens, cada um só com "imagem", para a montagem final com música (cortes rápidos, sem legenda). Todos mostram o MESMO momento-clímax, cada um com um enquadramento ou visão diferente (ex.: close nos olhos, plano aberto, silhueta contra a luz, câmera de baixo para cima, detalhe das mãos ou de um objeto, de costas, olhando para a câmera), para parecer que a cena muda a cada corte.
+- "imagem" (parágrafos e final): prompt em inglês, cinematográfico, vertical 9:16, sem texto na imagem. Descreva só o visual (lugar, clima, roupas, objetos, expressão) com personagens genéricos descritos pela aparência (ex.: "a tall man in a dark coat"), mantendo a MESMA aparência em todos os prompts. NUNCA inclua nome da obra, de personagem, de ator, de marca nem pessoas reais, porque os geradores de imagem bloqueiam isso. Sem sangue nem violência gráfica.
+- "titulo": até 60 caracteres, gera curiosidade sem entregar o final; pode citar a obra.
+- "assunto": obra + cena resumidas em até 12 palavras (usado para evitar repetições).
+- "descricao": ${tiktok ? "legenda" : "descrição"} para o ${tiktok ? "TikTok" : "YouTube"} em português. Comece com um aviso de spoiler da obra. ${descFormato}
+Responda APENAS com JSON, sem markdown: {"titulo":"...","assunto":"...","descricao":"...","paragrafos":[{"texto":"...","imagem":"..."}],"final":[{"imagem":"..."}]}`;
+
   const chamar = (modelo, thinking) => fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent`, {
     method: "POST",
     signal: AbortSignal.timeout(15000),
     headers: { "x-goog-api-key": process.env.GEMINI_API_KEY, "content-type": "application/json" },
     body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { responseMimeType: "application/json", maxOutputTokens: 3000, ...(thinking ? { thinkingConfig: { thinkingLevel: "low" } } : {}) } })
+      generationConfig: { responseMimeType: "application/json", maxOutputTokens: 4500, ...(thinking ? { thinkingConfig: { thinkingLevel: "low" } } : {}) } })
   });
   const falhas = [], inicio = Date.now(), esperar = ms => new Promise(r => setTimeout(r, ms));
   for (const modelo of MODELOS) {
@@ -100,6 +122,10 @@ Responda APENAS com JSON, sem markdown: {"descricao":"..."}`;
         const total = (json.paragrafos || []).reduce((n, p) => n + String(p.texto || "").trim().split(/\s+/).filter(Boolean).length, 0);
         if (modo !== "descricao" && total < minPal * 0.85 && tentativa === 1) { // curto demais: pede de novo uma vez
           prompt += `\nATENÇÃO: sua resposta anterior tinha só ${total} palavras. Reescreva com entre ${minPal} e ${maxPal} palavras no total e ${nPar} parágrafos.`;
+          continue;
+        }
+        if (cena && (json.final || []).length < 3 && tentativa === 1) { // faltou a montagem final: pede de novo uma vez
+          prompt += `\nATENÇÃO: sua resposta anterior não trouxe o campo "final" com ${nCenas} itens. Inclua-o.`;
           continue;
         }
         return res.status(200).json(json);
