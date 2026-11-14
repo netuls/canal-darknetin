@@ -4,22 +4,23 @@
 const MAX_BYTES = 4200000;
 
 // Cada fonte devolve uma lista de clipes: { id, arquivos: [{ link, w, h, tam }] } (do melhor para o pior arquivo)
+const embaralhar = a => { a = [...a]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 const FONTES = {
-  async pixabay(q) {
-    const r = await fetch("https://pixabay.com/api/videos/?safesearch=true&per_page=20&key=" + encodeURIComponent(process.env.PIXABAY_API_KEY) + "&q=" + encodeURIComponent(q), { signal: AbortSignal.timeout(15000) });
+  async pixabay(q, lang) {
+    const r = await fetch("https://pixabay.com/api/videos/?safesearch=true&per_page=30&lang=" + lang + "&key=" + encodeURIComponent(process.env.PIXABAY_API_KEY) + "&q=" + encodeURIComponent(q), { signal: AbortSignal.timeout(15000) });
     if (!r.ok) { const e = new Error("Pixabay respondeu " + r.status); e.status = r.status; throw e; }
     const hits = ((await r.json()).hits || []).filter(v => v.duration >= 3 && v.duration <= 25);
-    const vert = v => (v.videos?.medium?.height || 0) > (v.videos?.medium?.width || 0) ? 0 : 1; // verticais primeiro
-    return hits.sort((a, b) => vert(a) - vert(b)).map(v => ({
+    const ehVert = v => (v.videos?.medium?.height || 0) > (v.videos?.medium?.width || 0);
+    return [...embaralhar(hits.filter(ehVert)), ...embaralhar(hits.filter(v => !ehVert(v)))].map(v => ({ // verticais primeiro; sorteia dentro de cada grupo
       id: "px" + v.id,
       arquivos: ["large", "medium", "small", "tiny"].map(k => v.videos?.[k]).filter(f => f && f.url).map(f => ({ link: f.url, w: f.width, h: f.height, tam: f.size || 0 }))
     }));
   },
-  async pexels(q) {
-    const r = await fetch("https://api.pexels.com/videos/search?orientation=portrait&size=medium&per_page=20&query=" + encodeURIComponent(q), {
+  async pexels(q, lang) {
+    const r = await fetch("https://api.pexels.com/videos/search?orientation=portrait&size=medium&per_page=30&locale=" + (lang === "pt" ? "pt-BR" : "en-US") + "&query=" + encodeURIComponent(q), {
       headers: { Authorization: process.env.PEXELS_API_KEY }, signal: AbortSignal.timeout(15000) });
     if (!r.ok) { const e = new Error("Pexels respondeu " + r.status); e.status = r.status; throw e; }
-    return ((await r.json()).videos || []).filter(v => v.duration >= 3 && v.duration <= 25).map(v => ({
+    return embaralhar(((await r.json()).videos || []).filter(v => v.duration >= 3 && v.duration <= 25)).map(v => ({
       id: "pe" + v.id,
       arquivos: (v.video_files || []).filter(f => f.file_type === "video/mp4" && f.link && f.height >= f.width && f.width >= 360 && f.width <= 1080)
         .sort((a, b) => b.width - a.width).map(f => ({ link: f.link, w: f.width, h: f.height, tam: 0 }))
@@ -36,6 +37,7 @@ module.exports = async (req, res) => {
 
   const busca = String((req.body || {}).busca || "").replace(/[^\p{L}\p{N} ]/gu, " ").replace(/\s+/g, " ").trim().slice(0, 80);
   const pular = new Set((Array.isArray((req.body || {}).pular) ? req.body.pular : []).map(String));
+  const lang = (req.body || {}).lang === "pt" ? "pt" : "en";
   if (!busca) return res.status(400).json({ erro: "busca vazia" });
 
   const inicio = Date.now(), erros = [];
@@ -43,7 +45,7 @@ module.exports = async (req, res) => {
   for (const q of consultas) {
     for (const fonte of ativas) {
       let clipes;
-      try { clipes = await FONTES[fonte](q); }
+      try { clipes = await FONTES[fonte](q, lang); }
       catch (e) { console.error(fonte, e.message); erros.push(fonte + ": " + (e.status || "erro")); continue; }
       for (const c of clipes.filter(c => !pular.has(c.id)).slice(0, 8)) {
         for (const f of c.arquivos.slice(0, 4)) {
