@@ -66,6 +66,12 @@ module.exports = async (req, res) => {
       }
     }
   }
-  if (erros.length && erros.length >= consultas.length * ativas.length) return res.status(502).json({ erro: "a busca de vídeos falhou (" + erros.join(" | ") + "). Confira a chave no Vercel ou espere um minuto." });
+  if (erros.length && erros.length >= consultas.length * ativas.length) {
+    const recusadas = [...new Set(erros.filter(e => /: (401|403)$/.test(e)).map(e => e.split(":")[0]))];
+    const dica = recusadas.length
+      ? "a chave do " + recusadas.join(" e do ") + " foi recusada (inválida ou sem permissão)." + (process.env.PIXABAY_API_KEY ? "" : " Crie a PIXABAY_API_KEY no Vercel (grátis em pixabay.com/api/docs) e apague a PEXELS_API_KEY.")
+      : "confira a chave no Vercel ou espere um minuto.";
+    return res.status(502).json({ erro: "a busca de vídeos falhou (" + [...new Set(erros)].join(" | ") + "): " + dica });
+  }
   res.status(404).json({ erro: `não achei um clipe pequeno para "${busca}". Troque a busca (em inglês funciona melhor) ou envie o vídeo manualmente.` });
 };
