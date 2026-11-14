@@ -239,13 +239,16 @@ function setImg(i,file){
     im.onload=()=>{P[i].vid=false;P[i].vidId=null;P[i].orig={w:im.naturalWidth,h:im.naturalHeight};P[i].img=nitidez(im);P[i].url=url;render();ok()};im.src=url});
 }
 // Busca um clipe vertical grátis (Pexels) para o parágrafo i e coloca como vídeo dele.
+const STOP=new Set('que com para uma uns umas dos das nos nas por mais mas como seu sua seus suas ele ela eles elas isso essa esse esta este aqui ali muito já foi era são tem não sim ainda quando onde porque então depois antes sobre entre até sem tudo nada todo toda cada mesmo apenas quase sempre nunca havia estava tinha ficou pode podia'.split(' '));
+const palavrasChave=t=>[...new Set(t.toLowerCase().replace(/[^\p{L} ]/gu,' ').split(/\s+/).filter(w=>w.length>4&&!STOP.has(w)&&!w.endsWith('mente')))].sort((a,b)=>b.length-a.length).slice(0,3).join(' ');
 async function buscarVideo(i){
   const p=P[i];if(p.final)throw new Error('O final usa foto.');
-  const q=(p.busca||(p.imagem||p.texto||'').split(/\s+/).slice(0,4).join(' ')).trim();
+  const ptBr=!p.busca; // sem "busca" da IA: usa as palavras-chave do próprio texto (em português)
+  const q=(p.busca||palavrasChave(p.texto||'')||(p.imagem||'').split(/\s+/).slice(0,4).join(' ')).trim();
   if(!q)throw new Error('Esse parágrafo está vazio.');
   say(`Buscando vídeo ${i+1} de ${P.length} ("${q}")...`);
   const r=await fetch('/api/video',{method:'POST',headers:{'Content-Type':'application/json','x-senha':$('senha').value},
-    body:JSON.stringify({busca:q,pular:P.map(x=>x.vidId).filter(Boolean)})});
+    body:JSON.stringify({busca:q,lang:ptBr&&p.texto?'pt':'en',pular:P.map(x=>x.vidId).filter(Boolean)})});
   if(!r.ok){const d=await r.json().catch(()=>({}));throw new Error(d.erro||r.status)}
   const id=r.headers.get('x-video-id');
   await setImg(i,new File([await r.blob()],'clipe.mp4',{type:'video/mp4'}));
